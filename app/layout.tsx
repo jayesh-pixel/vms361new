@@ -2,13 +2,16 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { AuthProvider } from "@/components/auth-provider"
+import { ShipProvider } from "@/hooks/use-ships"
+import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "3D Earth Globe - Interactive World Explorer",
-  description: "Explore the world in photorealistic 3D using Google Maps technology",
-    generator: 'v0.dev'
+  title: "VMS 361 - Vessel Management System",
+  description: "Comprehensive vessel management system for fleet operations",
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -18,7 +21,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <AuthProvider>
+          <ShipProvider>
+            {children}
+            <Toaster />
+          </ShipProvider>
+        </AuthProvider>
+      </body>
     </html>
   )
 }

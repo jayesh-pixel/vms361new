@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -17,7 +18,8 @@ import {
   Menu,
   Bell,
   Search,
-  User
+  User,
+  LogOut
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -38,49 +40,49 @@ const navigationItems = [
   {
     title: "Dashboard",
     icon: BarChart3,
-    href: "/",
+    href: "/dashboard",
     description: "Overview and analytics"
   },
   {
     title: "Ships",
     icon: Ship,
-    href: "/ships",
+    href: "/dashboard/ships",
     description: "Fleet management"
   },
   {
     title: "Crew",
     icon: Users,
-    href: "/crew",
+    href: "/dashboard/crew",
     description: "Personnel management"
   },
   {
     title: "Requisition",
     icon: FileText,
-    href: "/requisition",
+    href: "/dashboard/requisition",
     description: "Material & service requests"
   },
   {
     title: "Stock / Inventory",
     icon: Package,
-    href: "/inventory",
+    href: "/dashboard/inventory",
     description: "Parts and supplies"
   },
   {
     title: "Admin",
     icon: Shield,
-    href: "/admin",
+    href: "/dashboard/admin",
     description: "System administration"
   },
   {
     title: "Projects",
     icon: FolderOpen,
-    href: "/projects",
+    href: "/dashboard/projects",
     description: "Project management"
   },
   {
     title: "Settings",
     icon: Settings,
-    href: "/settings",
+    href: "/dashboard/settings",
     description: "System preferences"
   },
 ]
@@ -141,6 +143,18 @@ function Sidebar({ className }: { className?: string }) {
 }
 
 function Header() {
+  const { user, signOut } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+  }
+
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="container flex h-16 items-center justify-between px-4">
@@ -189,7 +203,7 @@ function Header() {
                 <Avatar className="h-9 w-9">
                   <AvatarImage src="/placeholder-user.jpg" alt="User" />
                   <AvatarFallback>
-                    <User className="h-5 w-5" />
+                    {user?.email ? user.email.charAt(0).toUpperCase() : 'U'}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -197,18 +211,40 @@ function Header() {
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Captain Smith</p>
-                  <p className="text-xs leading-none text-slate-600">captain@shipmanager.com</p>
+                  <p className="text-sm font-medium leading-none">
+                    {user?.displayName || 'User'}
+                  </p>
+                  <p className="text-xs leading-none text-slate-600">
+                    {user?.email || 'user@vms361.com'}
+                  </p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Support</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/settings')}>
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/settings')}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Shield className="mr-2 h-4 w-4" />
+                Support
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Always visible logout button */}
+          <Button variant="outline" className="flex items-center gap-2" onClick={handleLogout}>
+            <LogOut className="h-4 w-4" />
+            <span className="hidden md:inline">Log out</span>
+          </Button>
         </div>
       </div>
     </header>
