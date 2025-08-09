@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useShips } from "@/hooks/use-ships"
+import { usePermissions } from "@/hooks/use-permissions"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,8 @@ import {
   Plus,
   Trash2,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  Lock
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Ship as ShipType, CrewMember, Certificate, InventoryItem, Requisition, Task } from "@/lib/types/ships"
@@ -53,8 +55,16 @@ export default function ShipDetailPage() {
     addCertificate,
     addInventoryItem,
     createRequisition,
-    createTask
+    createTask,
+    canUpdateShip,
+    canDeleteShip,
+    canManageCrew,
+    canManageInventory,
+    canCreateRequisition,
+    canCreateTask
   } = useShips()
+  
+  const { isViewer } = usePermissions()
 
   // Local state
   const [activeTab, setActiveTab] = useState("overview")

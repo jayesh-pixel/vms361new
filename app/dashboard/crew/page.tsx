@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, Search, Plus, Upload, Calendar, Ship, Mail, Phone } from "lucide-react"
+import { Users, Search, Plus, Upload, Calendar, Ship, Mail, Phone, Lock } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
 import type { CrewMember } from "@/lib/types"
 
 export default function CrewPage() {
+  const { canManageCrew, isViewer } = usePermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [rankFilter, setRankFilter] = useState("all")
@@ -125,14 +127,18 @@ export default function CrewPage() {
             <p className="text-slate-600 mt-1">Manage personnel across your fleet</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Import Crew
-            </Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Crew Member
-            </Button>
+            {canManageCrew() && (
+              <>
+                <Button variant="outline">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import Crew
+                </Button>
+                <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Crew Member
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

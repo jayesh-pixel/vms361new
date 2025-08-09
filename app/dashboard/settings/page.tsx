@@ -2,9 +2,12 @@
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Settings, User, Bell, Shield, Globe, Palette } from "lucide-react"
+import { Settings, User, Bell, Shield, Globe, Palette, Lock } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
 
 export default function SettingsPage() {
+  const { canManageCompanySettings, isOwner, isAdmin } = usePermissions()
+
   return (
     <DashboardLayout currentPage="settings">
       <div className="p-6 space-y-6">
@@ -46,33 +49,37 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-red-100 flex items-center justify-center">
-                  <Shield className="h-6 w-6 text-red-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Security</h3>
-                  <p className="text-sm text-slate-600">Password, two-factor authentication, and security</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {(canManageCompanySettings() || isOwner() || isAdmin()) && (
+            <>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-red-100 flex items-center justify-center">
+                      <Shield className="h-6 w-6 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Security</h3>
+                      <p className="text-sm text-slate-600">Password, two-factor authentication, and security</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-yellow-100 flex items-center justify-center">
-                  <Globe className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Regional Settings</h3>
-                  <p className="text-sm text-slate-600">Language, timezone, and regional preferences</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-yellow-100 flex items-center justify-center">
+                      <Globe className="h-6 w-6 text-yellow-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Regional Settings</h3>
+                      <p className="text-sm text-slate-600">Language, timezone, and regional preferences</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-6">

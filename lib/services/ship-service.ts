@@ -59,7 +59,7 @@ export class ShipService {
       // Handle image upload if provided
       let imageUrl: string | null = null;
       if (image) {
-        const imagePath = `ships/${companyId}/${docRef.id}/${Date.now()}_${image.name}`;
+        const imagePath = `ships/${docRef.id}/${Date.now()}_${image.name}`;
         imageUrl = await storageService.uploadFile(image, imagePath);
         
         // Update the document with the image URL

@@ -2,9 +2,12 @@
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FolderOpen, Plus, Calendar, Users, CheckCircle } from "lucide-react"
+import { FolderOpen, Plus, Calendar, Users, CheckCircle, Lock } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
 
 export default function ProjectsPage() {
+  const { canCreateTask, isOwner, isAdmin } = usePermissions()
+
   return (
     <DashboardLayout currentPage="projects">
       <div className="p-6 space-y-6">
@@ -14,10 +17,12 @@ export default function ProjectsPage() {
             <h1 className="text-3xl font-bold text-slate-900">Project Management</h1>
             <p className="text-slate-600 mt-1">Manage maintenance projects and operations</p>
           </div>
-          <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-            <Plus className="h-4 w-4 mr-2" />
-            New Project
-          </Button>
+          {(canCreateTask() || isOwner() || isAdmin()) && (
+            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+              <Plus className="h-4 w-4 mr-2" />
+              New Project
+            </Button>
+          )}
         </div>
 
         {/* Stats */}

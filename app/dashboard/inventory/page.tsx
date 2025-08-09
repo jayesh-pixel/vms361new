@@ -2,9 +2,12 @@
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Package, Plus, AlertTriangle, TrendingDown, TrendingUp } from "lucide-react"
+import { Package, Plus, AlertTriangle, TrendingDown, TrendingUp, Lock } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
 
 export default function InventoryPage() {
+  const { canManageInventory, isViewer } = usePermissions()
+
   return (
     <DashboardLayout currentPage="inventory">
       <div className="p-6 space-y-6">
@@ -14,10 +17,12 @@ export default function InventoryPage() {
             <h1 className="text-3xl font-bold text-slate-900">Inventory Management</h1>
             <p className="text-slate-600 mt-1">Track parts, supplies, and stock levels</p>
           </div>
-          <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Inventory Item
-          </Button>
+          {canManageInventory() && (
+            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Inventory Item
+            </Button>
+          )}
         </div>
 
         {/* Stats */}

@@ -17,7 +17,7 @@ import type { Ship as ShipType } from "@/lib/types/ships"
 
 export default function ShipsPage() {
   const router = useRouter()
-  const { ships, isLoading, error, setCurrentShip, createShip } = useShips()
+  const { ships, isLoading, error, setCurrentShip, createShip, canCreateShip, canUpdateShip, canDeleteShip } = useShips()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
@@ -215,13 +215,15 @@ export default function ShipsPage() {
             <h1 className="text-3xl font-bold text-slate-900">Fleet Management</h1>
             <p className="text-slate-600 mt-1">Manage and monitor your entire fleet</p>
           </div>
-          <Button 
-            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-            onClick={handleAddShip}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Ship
-          </Button>
+          {canCreateShip() && (
+            <Button 
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+              onClick={handleAddShip}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Ship
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -289,7 +291,7 @@ export default function ShipsPage() {
                     }
                   </p>
                 </div>
-                {ships.length === 0 && (
+                {ships.length === 0 && canCreateShip() && (
                   <Button onClick={handleAddShip}>Add Your First Ship</Button>
                 )}
               </div>

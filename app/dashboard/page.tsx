@@ -3,6 +3,7 @@ import { useRef, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useShips } from "@/hooks/use-ships"
+import { usePermissions } from "@/hooks/use-permissions"
 import EarthMap3D, { type EarthMap3DRef } from "@/components/react-earth-map-3d"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { StatsCards, AlertsWidget } from "@/components/dashboard/stats-cards"
@@ -19,7 +20,8 @@ import type { DashboardStats } from "@/lib/types"
 
 export default function DashboardPage() {
   const { user, loading } = useAuth()
-  const { ships, stats, isLoading: shipsLoading, createShip, error } = useShips()
+  const { ships, stats, isLoading: shipsLoading, createShip, error, canCreateShip } = useShips()
+  const { userPermissions, isOwner, isAdmin, isViewer } = usePermissions()
   const mapRef = useRef<EarthMap3DRef>(null)
   const router = useRouter()
   const [selectedShip, setSelectedShip] = useState<Ship | null>(null)

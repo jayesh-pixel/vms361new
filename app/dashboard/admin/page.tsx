@@ -12,9 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Users, Settings, Activity, Database, Lock, AlertTriangle, CheckCircle, Plus, Edit, Trash2, Mail } from "lucide-react"
 import { useAuth } from '@/hooks/use-auth'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export default function AdminPage() {
   const { user } = useAuth()
+  const { canManageUsers, canManageCompanySettings, isAdmin, isOwner, userPermissions } = usePermissions()
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [showCreateUser, setShowCreateUser] = useState(false)
@@ -189,6 +191,23 @@ export default function AdminPage() {
     }
   }
 
+  // Check if user has admin access
+  if (!isAdmin() && !isOwner()) {
+    return (
+      <DashboardLayout currentPage="admin">
+        <div className="flex items-center justify-center h-96">
+          <Card className="w-96">
+            <CardContent className="p-6 text-center">
+              <Lock className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Denied</h3>
+              <p className="text-gray-600">You don't have permission to access the administration panel.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout currentPage="admin">
       <div className="p-6 space-y-6">
@@ -199,13 +218,14 @@ export default function AdminPage() {
             <p className="text-slate-600 mt-1">Manage users, monitor system health, and configure settings</p>
           </div>
           <div className="flex gap-3">
-            <Dialog open={showCreateUser} onOpenChange={setShowCreateUser}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add User
-                </Button>
-              </DialogTrigger>
+            {canManageUsers() && (
+              <Dialog open={showCreateUser} onOpenChange={setShowCreateUser}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add User
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <form onSubmit={handleCreateUser}>
                   <DialogHeader>
@@ -292,6 +312,7 @@ export default function AdminPage() {
                 </form>
               </DialogContent>
             </Dialog>
+            )}
             
             <Button variant="outline" className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white border-0">
               <Shield className="h-4 w-4 mr-2" />

@@ -2,9 +2,12 @@
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Plus, Clock, CheckCircle, AlertCircle } from "lucide-react"
+import { FileText, Plus, Clock, CheckCircle, AlertCircle, Lock } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
 
 export default function RequisitionPage() {
+  const { canCreateRequisition, canApproveRequisition } = usePermissions()
+
   return (
     <DashboardLayout currentPage="requisition">
       <div className="p-6 space-y-6">
@@ -14,10 +17,12 @@ export default function RequisitionPage() {
             <h1 className="text-3xl font-bold text-slate-900">Requisition Management</h1>
             <p className="text-slate-600 mt-1">Manage material and service requests</p>
           </div>
-          <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-            <Plus className="h-4 w-4 mr-2" />
-            New Requisition
-          </Button>
+          {canCreateRequisition() && (
+            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+              <Plus className="h-4 w-4 mr-2" />
+              New Requisition
+            </Button>
+          )}
         </div>
 
         {/* Stats */}
