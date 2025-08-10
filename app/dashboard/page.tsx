@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useShips } from "@/hooks/use-ships"
 import { usePermissions } from "@/hooks/use-permissions"
+import { CrewService } from "@/lib/services/crew-service"
 import EarthMap3D, { type EarthMap3DRef } from "@/components/react-earth-map-3d"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { StatsCards, AlertsWidget } from "@/components/dashboard/stats-cards"
@@ -14,8 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Users, Calendar, FileText, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
-import type { Ship, CreateShipRequest, ShipType } from "@/lib/types/ships"
+import type { Ship, CreateShipRequest, ShipType, CrewMember } from "@/lib/types/ships"
 import type { DashboardStats } from "@/lib/types"
 
 export default function DashboardPage() {
@@ -28,6 +30,8 @@ export default function DashboardPage() {
   const [showAddShipDialog, setShowAddShipDialog] = useState(false)
   const [hasRedirected, setHasRedirected] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [crewMembers, setCrewMembers] = useState<CrewMember[]>([])
+  const [crewLoading, setCrewLoading] = useState(true)
   const [newShipForm, setNewShipForm] = useState<CreateShipRequest>({
     name: '',
     imo: '',
@@ -58,6 +62,31 @@ export default function DashboardPage() {
     }
   }, [user, loading, router, hasRedirected])
 
+  // Load crew data
+  useEffect(() => {
+    loadCrewData()
+  }, [userPermissions])
+
+  const loadCrewData = async () => {
+    if (!userPermissions?.companyId) return
+    
+    setCrewLoading(true)
+    try {
+      if (isAdmin()) {
+        const allCrew = await CrewService.getAllCrew()
+        setCrewMembers(allCrew)
+      } else {
+        const companyCrew = await CrewService.getCrewByCompany(userPermissions.companyId)
+        setCrewMembers(companyCrew)
+      }
+    } catch (error: any) {
+      console.error('Error loading crew data:', error)
+      toast.error('Failed to load crew data')
+    } finally {
+      setCrewLoading(false)
+    }
+  }
+
   if (loading || shipsLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -66,10 +95,11 @@ export default function DashboardPage() {
     )
   }
 
-  // Convert ShipStats to DashboardStats
+  // Convert ShipStats to DashboardStats with crew data
+  const activeCrew = crewMembers.filter(crew => crew.status === 'active').length
   const dashboardStats: DashboardStats = stats ? {
     totalShips: stats.totalShips,
-    activeCrew: 0, // Not available in ShipStats, would need separate calculation
+    activeCrew: activeCrew,
     pendingRequisitions: stats.pendingRequisitions,
     tasksToday: stats.activeTasks,
     shipsAtSea: stats.byStatus.at_sea || 0,
@@ -78,7 +108,7 @@ export default function DashboardPage() {
     overdueMaintenances: 0 // Not available in ShipStats, would need separate calculation
   } : {
     totalShips: 0,
-    activeCrew: 0,
+    activeCrew: activeCrew,
     pendingRequisitions: 0,
     tasksToday: 0,
     shipsAtSea: 0,
@@ -262,6 +292,95 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Crew Overview Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Crew Overview</h2>
+            <Button 
+              variant="outline" 
+              onClick={() => router.push('/dashboard/crew')}
+            >
+              View All Crew
+            </Button>
+          </div>
+          
+          {crewLoading ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                <p className="mt-2 text-gray-500">Loading crew data...</p>
+              </CardContent>
+            </Card>
+          ) : crewMembers.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="space-y-4">
+                  <div className="text-gray-500">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium">No crew members yet</h3>
+                    <p className="text-gray-500">Add crew members to your ships to see them here</p>
+                  </div>
+                  <Button onClick={() => router.push('/dashboard/crew')}>
+                    Manage Crew
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {crewMembers.slice(0, 8).map((crew) => {
+                const ship = ships.find(s => s.id === crew.shipId);
+                return (
+                  <Card key={crew.id} className="hover:shadow-lg transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-sm">{crew.name}</h4>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            crew.status === 'active' ? 'bg-green-100 text-green-800' :
+                            crew.status === 'on_leave' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {crew.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600">{crew.rank}</p>
+                        <p className="text-xs text-gray-600">🏴 {crew.nationality}</p>
+                        {ship && (
+                          <p className="text-xs text-gray-600">🚢 {ship.name}</p>
+                        )}
+                        {crew.salary && (
+                          <p className="text-xs text-gray-600">
+                            💰 {crew.currency} {crew.salary.toLocaleString()}
+                          </p>
+                        )}
+                        <div className="text-xs text-gray-500">
+                          Joined: {crew.joinDate.toLocaleDateString()}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+          
+          {crewMembers.length > 8 && (
+            <div className="text-center">
+              <Button 
+                variant="outline" 
+                onClick={() => router.push('/dashboard/crew')}
+              >
+                View {crewMembers.length - 8} More Crew Members
+              </Button>
             </div>
           )}
         </div>
