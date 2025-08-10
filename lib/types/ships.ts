@@ -42,6 +42,11 @@ export interface CrewMember {
     emergencyContact?: string;
   };
   status: 'active' | 'on_leave' | 'terminated';
+  salary?: number;
+  currency?: string;
+  jobType?: string;
+  shipId?: string; // Reference to the ship this crew member belongs to
+  companyId?: string; // Reference to the company
   createdAt: Date;
   updatedAt: Date;
 }

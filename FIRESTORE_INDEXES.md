@@ -14,6 +14,32 @@ The ship management system requires specific Firestore composite indexes to func
   2. `name` (Ascending)
   3. `__name__` (Ascending) - automatically added
 
+### 2. Crew Collection Indexes (New)
+**Error**: The query requires an index for crew collection with companyId and name fields.
+
+**Required Indexes**:
+
+#### A. Crew by Company Index
+- Collection: `crew`
+- Fields to index:
+  1. `companyId` (Ascending)
+  2. `name` (Ascending)
+  3. `__name__` (Ascending) - automatically added
+
+#### B. Crew by Ship Index
+- Collection: `crew`
+- Fields to index:
+  1. `shipId` (Ascending)
+  2. `name` (Ascending)
+  3. `__name__` (Ascending) - automatically added
+
+#### C. Crew by Status Index
+- Collection: `crew`
+- Fields to index:
+  1. `status` (Ascending)
+  2. `name` (Ascending)
+  3. `__name__` (Ascending) - automatically added
+
 **Firebase Console Link**: 
 ```
 https://console.firebase.google.com/v1/r/project/vms361-codex1/firestore/indexes?create_composite=Cktwcm9qZWN0cy92bXMzNjEtY29kZXgxL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9zaGlwcy9pbmRleGVzL18QARoNCgljb21wYW55SWQQARoICgRuYW1lEAEaDAoIX19uYW1lX18QAQ

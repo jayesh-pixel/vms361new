@@ -100,7 +100,10 @@ export default function ShipDetailPage() {
     contractEndDate: "",
     email: "",
     phone: "",
-    emergencyContact: ""
+    emergencyContact: "",
+    salary: "",
+    currency: "USD",
+    jobType: ""
   })
 
   const [newCertificate, setNewCertificate] = useState({
@@ -242,25 +245,38 @@ export default function ShipDetailPage() {
 
   const handleAddCrewMember = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newCrewMember.name || !newCrewMember.rank) {
-      toast.error("Please fill in required fields")
+    if (!newCrewMember.name || !newCrewMember.rank || !newCrewMember.jobType) {
+      toast.error("Please fill in required fields including job type")
+      return
+    }
+
+    // Check if contract end date is required
+    if ((newCrewMember.jobType === "Contract" || newCrewMember.jobType === "Internship") && !newCrewMember.contractEndDate) {
+      toast.error("Contract end date is required for Contract and Internship job types")
       return
     }
 
     try {
-      const crewData = {
+      const crewData: any = {
         name: newCrewMember.name,
         rank: newCrewMember.rank,
         nationality: newCrewMember.nationality,
         joinDate: new Date(newCrewMember.joinDate || Date.now()),
-        contractEndDate: newCrewMember.contractEndDate ? new Date(newCrewMember.contractEndDate) : undefined,
         certificates: [],
         contact: {
-          email: newCrewMember.email,
-          phone: newCrewMember.phone,
-          emergencyContact: newCrewMember.emergencyContact
+          email: newCrewMember.email || "",
+          phone: newCrewMember.phone || "",
+          emergencyContact: newCrewMember.emergencyContact || ""
         },
+        salary: parseFloat(newCrewMember.salary) || 0,
+        currency: newCrewMember.currency,
+        jobType: newCrewMember.jobType,
         status: "active" as const
+      }
+
+      // Only add contractEndDate if it has a value
+      if (newCrewMember.contractEndDate) {
+        crewData.contractEndDate = new Date(newCrewMember.contractEndDate)
       }
 
       await addCrewMember(shipId, crewData)
@@ -274,7 +290,10 @@ export default function ShipDetailPage() {
         contractEndDate: "",
         email: "",
         phone: "",
-        emergencyContact: ""
+        emergencyContact: "",
+        salary: "",
+        currency: "USD",
+        jobType: ""
       })
       loadShipData(shipId)
     } catch (error: any) {
@@ -1108,6 +1127,19 @@ export default function ShipDetailPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="crew-jobType">Job Type *</Label>
+                <Select value={newCrewMember.jobType} onValueChange={(value) => setNewCrewMember(prev => ({...prev, jobType: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select job type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Permanent">Permanent</SelectItem>
+                    <SelectItem value="Contract">Contract</SelectItem>
+                    <SelectItem value="Internship">Internship</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="crew-nationality">Nationality</Label>
                 <Input
                   id="crew-nationality"
@@ -1115,26 +1147,29 @@ export default function ShipDetailPage() {
                   onChange={(e) => setNewCrewMember(prev => ({...prev, nationality: e.target.value}))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="crew-join-date">Join Date</Label>
+                <Input
+                  id="crew-join-date"
+                  type="date"
+                  value={newCrewMember.joinDate}
+                  onChange={(e) => setNewCrewMember(prev => ({...prev, joinDate: e.target.value}))}
+                  placeholder="dd-mm-yyyy"
+                />
+              </div>
+              {(newCrewMember.jobType === "Contract" || newCrewMember.jobType === "Internship") && (
                 <div className="space-y-2">
-                  <Label htmlFor="crew-join-date">Join Date</Label>
-                  <Input
-                    id="crew-join-date"
-                    type="date"
-                    value={newCrewMember.joinDate}
-                    onChange={(e) => setNewCrewMember(prev => ({...prev, joinDate: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="crew-contract-end">Contract End</Label>
+                  <Label htmlFor="crew-contract-end">Contract End Date *</Label>
                   <Input
                     id="crew-contract-end"
                     type="date"
                     value={newCrewMember.contractEndDate}
                     onChange={(e) => setNewCrewMember(prev => ({...prev, contractEndDate: e.target.value}))}
+                    placeholder="dd-mm-yyyy"
+                    required
                   />
                 </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="crew-email">Email</Label>
                 <Input
@@ -1151,6 +1186,34 @@ export default function ShipDetailPage() {
                   value={newCrewMember.phone}
                   onChange={(e) => setNewCrewMember(prev => ({...prev, phone: e.target.value}))}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="crew-salary">Salary</Label>
+                  <Input
+                    id="crew-salary"
+                    type="number"
+                    placeholder="Enter salary"
+                    value={newCrewMember.salary}
+                    onChange={(e) => setNewCrewMember(prev => ({...prev, salary: e.target.value}))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="crew-currency">Currency</Label>
+                  <Select value={newCrewMember.currency} onValueChange={(value) => setNewCrewMember(prev => ({...prev, currency: value}))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                      <SelectItem value="INR">INR</SelectItem>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                      <SelectItem value="AED">AED</SelectItem>
+                      <SelectItem value="SGD">SGD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setShowAddCrewDialog(false)}>

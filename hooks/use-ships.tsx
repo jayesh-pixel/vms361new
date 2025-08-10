@@ -271,12 +271,31 @@ export function ShipProvider({ children }: { children: ReactNode }) {
       setError(null);
       const crewId = await ShipService.addCrewMember(shipId, crewData);
       
+      // Create a clean crew object for local state update without undefined values
+      const cleanCrewData: CrewMember = {
+        id: crewId,
+        name: crewData.name,
+        rank: crewData.rank,
+        nationality: crewData.nationality,
+        joinDate: crewData.joinDate instanceof Date ? crewData.joinDate : new Date(crewData.joinDate || new Date()),
+        certificates: crewData.certificates || [],
+        contact: crewData.contact || { email: '', phone: '', emergencyContact: '' },
+        status: crewData.status || 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        // Only add optional fields if they exist
+        ...(crewData.contractEndDate && { contractEndDate: crewData.contractEndDate }),
+        ...(crewData.salary && { salary: crewData.salary }),
+        ...(crewData.currency && { currency: crewData.currency }),
+        ...(crewData.jobType && { jobType: crewData.jobType }),
+      };
+      
       // Update ships list to reflect new crew member count
       setShips(prev => prev.map(ship => {
         if (ship.id === shipId) {
           return {
             ...ship,
-            crew: [...ship.crew, { ...crewData, id: crewId, createdAt: new Date(), updatedAt: new Date() }]
+            crew: [...ship.crew, cleanCrewData]
           };
         }
         return ship;

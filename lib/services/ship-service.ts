@@ -30,7 +30,8 @@ import {
 
 export class ShipService {
   private static COLLECTION = 'ships';
-  private static CREW_SUBCOLLECTION = 'crew';
+  private static CREW_COLLECTION = 'crew'; // Main crew collection
+  private static CREW_SUBCOLLECTION = 'crew'; // Ship crew references
   private static CERTIFICATES_SUBCOLLECTION = 'certificates';
   private static INVENTORY_SUBCOLLECTION = 'inventory';
   private static REQUISITIONS_SUBCOLLECTION = 'requisitions';
@@ -155,20 +156,69 @@ export class ShipService {
   // Crew Management
   static async addCrewMember(shipId: string, crewData: Omit<CrewMember, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
-      const shipRef = doc(db, this.COLLECTION, shipId);
-      const crewRef = doc(collection(shipRef, this.CREW_SUBCOLLECTION));
+      // Get ship data to get companyId
+      const shipDoc = await getDoc(doc(db, this.COLLECTION, shipId));
+      if (!shipDoc.exists()) {
+        throw new Error('Ship not found');
+      }
+      const shipData = shipDoc.data();
       
-      const newCrew = {
-        ...crewData,
-        id: crewRef.id,
-        joinDate: crewData.joinDate,
-        contractEndDate: crewData.contractEndDate,
+      // Build the crew object explicitly, only including defined values
+      const newCrew: any = {
+        name: crewData.name || "",
+        rank: crewData.rank || "",
+        nationality: crewData.nationality || "",
+        joinDate: crewData.joinDate instanceof Date ? crewData.joinDate : new Date(crewData.joinDate || new Date()),
+        certificates: Array.isArray(crewData.certificates) ? crewData.certificates : [],
+        contact: {
+          email: crewData.contact?.email || "",
+          phone: crewData.contact?.phone || "",
+          emergencyContact: crewData.contact?.emergencyContact || ""
+        },
+        status: crewData.status || "active",
+        shipId: shipId, // Add reference to the ship
+        companyId: shipData.companyId, // Add company reference
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      await addDoc(collection(shipRef, this.CREW_SUBCOLLECTION), newCrew);
-      return crewRef.id;
+      // Only add optional fields if they have valid values
+      if (crewData.contractEndDate && crewData.contractEndDate !== undefined && crewData.contractEndDate !== null) {
+        newCrew.contractEndDate = crewData.contractEndDate instanceof Date ? crewData.contractEndDate : new Date(crewData.contractEndDate);
+      }
+
+      if (crewData.salary !== undefined && crewData.salary !== null && crewData.salary !== 0) {
+        const salaryNum = typeof crewData.salary === 'string' ? parseFloat(crewData.salary) : crewData.salary;
+        if (!isNaN(salaryNum) && salaryNum > 0) {
+          newCrew.salary = salaryNum;
+        }
+      }
+      
+      if (crewData.currency && crewData.currency !== undefined && crewData.currency !== null) {
+        newCrew.currency = crewData.currency;
+      }
+      
+      if (crewData.jobType && crewData.jobType !== undefined && crewData.jobType !== null) {
+        newCrew.jobType = crewData.jobType;
+      }
+
+      // Step 1: Add crew member to main crew collection
+      const crewDocRef = await addDoc(collection(db, this.CREW_COLLECTION), newCrew);
+      const crewId = crewDocRef.id;
+      
+      // Step 2: Add reference to ship's crew subcollection
+      const shipRef = doc(db, this.COLLECTION, shipId);
+      const crewReference = {
+        crewId: crewId,
+        name: newCrew.name,
+        rank: newCrew.rank,
+        status: newCrew.status,
+        addedAt: new Date()
+      };
+      
+      await addDoc(collection(shipRef, this.CREW_SUBCOLLECTION), crewReference);
+      
+      return crewId;
     } catch (error) {
       console.error('Error adding crew member:', error);
       throw error;
@@ -178,19 +228,35 @@ export class ShipService {
   static async getShipCrew(shipId: string): Promise<CrewMember[]> {
     try {
       const shipRef = doc(db, this.COLLECTION, shipId);
-      const crewQuery = query(collection(shipRef, this.CREW_SUBCOLLECTION));
-      const querySnapshot = await getDocs(crewQuery);
+      const crewReferencesQuery = query(collection(shipRef, this.CREW_SUBCOLLECTION));
+      const referencesSnapshot = await getDocs(crewReferencesQuery);
       
-      return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          ...data,
-          joinDate: data.joinDate?.toDate(),
-          contractEndDate: data.contractEndDate?.toDate(),
-          createdAt: data.createdAt?.toDate(),
-          updatedAt: data.updatedAt?.toDate(),
-        };
-      }) as CrewMember[];
+      // Get crew IDs from references
+      const crewIds = referencesSnapshot.docs.map(doc => doc.data().crewId);
+      
+      if (crewIds.length === 0) {
+        return [];
+      }
+      
+      // Fetch actual crew data from main crew collection
+      const crewMembers: CrewMember[] = [];
+      
+      for (const crewId of crewIds) {
+        const crewDoc = await getDoc(doc(db, this.CREW_COLLECTION, crewId));
+        if (crewDoc.exists()) {
+          const data = crewDoc.data();
+          crewMembers.push({
+            id: crewDoc.id,
+            ...data,
+            joinDate: data.joinDate?.toDate(),
+            contractEndDate: data.contractEndDate?.toDate(),
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+          } as CrewMember);
+        }
+      }
+      
+      return crewMembers;
     } catch (error) {
       console.error('Error getting ship crew:', error);
       throw error;
