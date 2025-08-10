@@ -11,6 +11,7 @@ export interface ShipLocation {
   lat: number;
   lng: number;
   port?: string;
+  lastPort?: string; // Previous port if not currently in port
   country?: string;
   lastUpdate: Date;
 }
@@ -140,6 +141,9 @@ export interface Ship {
   status: ShipStatus;
   location: ShipLocation;
   specifications: ShipSpecifications;
+  capacity?: number; // Ship capacity (tons, TEU, passengers, etc.)
+  assignedCrewIds?: string[]; // Array of crew member IDs assigned to this ship
+  description?: string; // Additional ship description
   companyId: string; // Company that owns this ship
   imageUrl?: string; // URL of ship image in Firebase Storage
   

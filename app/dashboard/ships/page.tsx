@@ -35,12 +35,27 @@ export default function ShipsPage() {
     draft: "",
     grossTonnage: "",
     deadweight: "",
+    capacity: "",
     port: "",
+    lastPort: "",
+    latitude: "",
+    longitude: "",
+    assignedCrew: [],
     description: ""
   })
   const [shipImage, setShipImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>([])
+
+  // Mock crew data - in real app, fetch from crew service
+  const mockCrew = [
+    { id: "crew1", name: "Captain John Smith", rank: "Captain", status: "available" },
+    { id: "crew2", name: "Chief Engineer Mike Johnson", rank: "Chief Engineer", status: "available" },
+    { id: "crew3", name: "First Officer Sarah Davis", rank: "First Officer", status: "available" },
+    { id: "crew4", name: "Second Engineer Tom Wilson", rank: "Second Engineer", status: "assigned" },
+    { id: "crew5", name: "Bosun Alex Rodriguez", rank: "Bosun", status: "available" }
+  ]
 
   // Filter and search ships
   const filteredShips = useMemo(() => {
@@ -137,11 +152,25 @@ export default function ShipsPage() {
       draft: "",
       grossTonnage: "",
       deadweight: "",
+      capacity: "",
       port: "",
+      lastPort: "",
+      latitude: "",
+      longitude: "",
+      assignedCrew: [],
       description: ""
     })
     setShipImage(null)
     setImagePreview(null)
+    setSelectedCrewIds([])
+  }
+
+  const handleCrewToggle = (crewId: string) => {
+    setSelectedCrewIds(prev => 
+      prev.includes(crewId) 
+        ? prev.filter(id => id !== crewId)
+        : [...prev, crewId]
+    )
   }
 
   const handleSubmitShip = async (e: React.FormEvent) => {
@@ -168,12 +197,15 @@ export default function ShipsPage() {
           yearBuilt: parseInt(newShip.yearBuilt) || new Date().getFullYear()
         },
         location: {
-          lat: 0,
-          lng: 0,
+          lat: parseFloat(newShip.latitude) || 0,
+          lng: parseFloat(newShip.longitude) || 0,
           port: newShip.port.trim() || "Unknown Port",
+          lastPort: newShip.lastPort.trim() || "",
           country: "",
           lastUpdate: new Date()
         },
+        capacity: parseFloat(newShip.capacity) || 0,
+        assignedCrewIds: selectedCrewIds,
         description: newShip.description.trim(),
         image: shipImage
       }
@@ -539,7 +571,7 @@ export default function ShipsPage() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mt-4">
+                <div className="grid grid-cols-4 gap-4 mt-4">
                   <div className="space-y-2">
                     <Label htmlFor="grossTonnage">Gross Tonnage</Label>
                     <Input
@@ -561,6 +593,16 @@ export default function ShipsPage() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="capacity">Capacity</Label>
+                    <Input
+                      id="capacity"
+                      type="number"
+                      value={newShip.capacity}
+                      onChange={(e) => setNewShip(prev => ({...prev, capacity: e.target.value}))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="yearBuilt">Year Built</Label>
                     <Input
                       id="yearBuilt"
@@ -573,15 +615,89 @@ export default function ShipsPage() {
                 </div>
               </div>
 
-              {/* Location */}
+              {/* Location & Coordinates */}
+              <div>
+                <h4 className="font-medium mb-3">Location & Coordinates</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="port">Current Port</Label>
+                    <Input
+                      id="port"
+                      value={newShip.port}
+                      onChange={(e) => setNewShip(prev => ({...prev, port: e.target.value}))}
+                      placeholder="Current port name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastPort">Last Port</Label>
+                    <Input
+                      id="lastPort"
+                      value={newShip.lastPort}
+                      onChange={(e) => setNewShip(prev => ({...prev, lastPort: e.target.value}))}
+                      placeholder="Last port if not in current port"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="latitude">Latitude</Label>
+                    <Input
+                      id="latitude"
+                      type="number"
+                      step="any"
+                      value={newShip.latitude}
+                      onChange={(e) => setNewShip(prev => ({...prev, latitude: e.target.value}))}
+                      placeholder="e.g. 40.7128"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="longitude">Longitude</Label>
+                    <Input
+                      id="longitude"
+                      type="number"
+                      step="any"
+                      value={newShip.longitude}
+                      onChange={(e) => setNewShip(prev => ({...prev, longitude: e.target.value}))}
+                      placeholder="e.g. -74.0060"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Crew Assignment */}
               <div className="space-y-2">
-                <Label htmlFor="port">Current Port</Label>
-                <Input
-                  id="port"
-                  value={newShip.port}
-                  onChange={(e) => setNewShip(prev => ({...prev, port: e.target.value}))}
-                  placeholder="Port name"
-                />
+                <Label>Assign Crew Members</Label>
+                <div className="p-4 border rounded-lg bg-gray-50 max-h-48 overflow-y-auto">
+                  <p className="text-sm text-gray-600 mb-3">Select crew members to assign to this ship:</p>
+                  <div className="space-y-2">
+                    {mockCrew.map((crew) => (
+                      <div key={crew.id} className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id={crew.id} 
+                          className="rounded"
+                          checked={selectedCrewIds.includes(crew.id)}
+                          onChange={() => handleCrewToggle(crew.id)}
+                          disabled={crew.status === 'assigned'}
+                        />
+                        <label htmlFor={crew.id} className={`text-sm flex-1 ${crew.status === 'assigned' ? 'text-gray-400' : ''}`}>
+                          {crew.name} - {crew.rank}
+                          {crew.status === 'assigned' && <span className="text-xs text-red-500 ml-2">(Already Assigned)</span>}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedCrewIds.length > 0 && (
+                    <div className="mt-3 pt-2 border-t">
+                      <p className="text-xs text-green-600">
+                        Selected: {selectedCrewIds.length} crew member(s)
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    Note: In production, this will fetch actual crew data from the system
+                  </p>
+                </div>
               </div>
 
               {/* Description */}
