@@ -10,6 +10,7 @@ import {
   UpdateShipRequest, 
   CrewMember, 
   Certificate, 
+  Drawing,
   InventoryItem, 
   Requisition, 
   Task,
@@ -38,6 +39,12 @@ interface ShipContextType {
   // Certificate Management
   addCertificate: (shipId: string, certData: Omit<Certificate, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => Promise<string>;
   getShipCertificates: (shipId: string) => Promise<Certificate[]>;
+
+  // Drawing Management
+  addDrawing: (shipId: string, drawingData: Omit<Drawing, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateDrawing: (shipId: string, drawingId: string, updates: Partial<Drawing>) => Promise<void>;
+  deleteDrawing: (shipId: string, drawingId: string) => Promise<void>;
+  getShipDrawings: (shipId: string) => Promise<Drawing[]>;
 
   // Inventory Management
   addInventoryItem: (shipId: string, itemData: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -342,6 +349,50 @@ export function ShipProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addDrawing = async (shipId: string, drawingData: Omit<Drawing, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+    try {
+      setError(null);
+      return await ShipService.addDrawing(shipId, drawingData);
+    } catch (err: any) {
+      console.error('Error adding drawing:', err);
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  const updateDrawing = async (shipId: string, drawingId: string, updates: Partial<Drawing>): Promise<void> => {
+    try {
+      setError(null);
+      await ShipService.updateDrawing(shipId, drawingId, updates);
+    } catch (err: any) {
+      console.error('Error updating drawing:', err);
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  const deleteDrawing = async (shipId: string, drawingId: string): Promise<void> => {
+    try {
+      setError(null);
+      await ShipService.deleteDrawing(shipId, drawingId);
+    } catch (err: any) {
+      console.error('Error deleting drawing:', err);
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  const getShipDrawings = async (shipId: string): Promise<Drawing[]> => {
+    try {
+      setError(null);
+      return await ShipService.getShipDrawings(shipId);
+    } catch (err: any) {
+      console.error('Error getting ship drawings:', err);
+      setError(err.message);
+      throw err;
+    }
+  };
+
   const addInventoryItem = async (shipId: string, itemData: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     try {
       setError(null);
@@ -533,6 +584,12 @@ export function ShipProvider({ children }: { children: ReactNode }) {
     addCertificate,
     getShipCertificates,
 
+    // Drawing Management
+    addDrawing,
+    updateDrawing,
+    deleteDrawing,
+    getShipDrawings,
+
     // Inventory Management
     addInventoryItem,
     updateInventoryStock,
@@ -559,7 +616,7 @@ export function ShipProvider({ children }: { children: ReactNode }) {
     canManageCrew,
     canManageInventory,
     canCreateRequisition,
-    canCreateTask,
+    canCreateTask
   };
 
   return (

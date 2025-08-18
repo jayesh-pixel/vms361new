@@ -66,6 +66,24 @@ export interface Certificate {
   updatedAt: Date;
 }
 
+export interface Drawing {
+  id: string;
+  name: string;
+  partNumber: string;
+  description?: string;
+  category: string;
+  version: string;
+  drawingNumber: string;
+  drawingType: 'technical' | 'schematic' | 'blueprint' | 'diagram' | 'manual';
+  documentUrl?: string;
+  thumbnailUrl?: string;
+  fileSize?: number;
+  fileType?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface InventoryItem {
   id: string;
   partNumber: string;
@@ -155,6 +173,7 @@ export interface Ship {
   // Related data
   crew: CrewMember[];
   certificates: Certificate[];
+  drawings: Drawing[];
   inventory: InventoryItem[];
   requisitions: Requisition[];
   tasks: Task[];

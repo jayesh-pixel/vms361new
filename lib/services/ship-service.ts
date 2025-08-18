@@ -22,6 +22,7 @@ import {
   UpdateShipRequest, 
   CrewMember, 
   Certificate, 
+  Drawing,
   InventoryItem, 
   Requisition, 
   Task,
@@ -33,6 +34,7 @@ export class ShipService {
   private static CREW_COLLECTION = 'crew'; // Main crew collection
   private static CREW_SUBCOLLECTION = 'crew'; // Ship crew references
   private static CERTIFICATES_SUBCOLLECTION = 'certificates';
+  private static DRAWINGS_SUBCOLLECTION = 'drawings';
   private static INVENTORY_SUBCOLLECTION = 'inventory';
   private static REQUISITIONS_SUBCOLLECTION = 'requisitions';
   private static TASKS_SUBCOLLECTION = 'tasks';
@@ -320,6 +322,76 @@ export class ShipService {
       }) as Certificate[];
     } catch (error) {
       console.error('Error getting ship certificates:', error);
+      throw error;
+    }
+  }
+
+  // Drawing Management
+  static async addDrawing(shipId: string, drawingData: Omit<Drawing, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    try {
+      const shipRef = doc(db, this.COLLECTION, shipId);
+      const drawingRef = doc(collection(shipRef, this.DRAWINGS_SUBCOLLECTION));
+      
+      const newDrawing = {
+        ...drawingData,
+        id: drawingRef.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await addDoc(collection(shipRef, this.DRAWINGS_SUBCOLLECTION), newDrawing);
+      return drawingRef.id;
+    } catch (error) {
+      console.error('Error adding drawing:', error);
+      throw error;
+    }
+  }
+
+  static async getShipDrawings(shipId: string): Promise<Drawing[]> {
+    try {
+      const shipRef = doc(db, this.COLLECTION, shipId);
+      const drawingQuery = query(collection(shipRef, this.DRAWINGS_SUBCOLLECTION));
+      const querySnapshot = await getDocs(drawingQuery);
+      
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          createdAt: data.createdAt?.toDate(),
+          updatedAt: data.updatedAt?.toDate(),
+        };
+      }) as Drawing[];
+    } catch (error) {
+      console.error('Error getting ship drawings:', error);
+      throw error;
+    }
+  }
+
+  static async updateDrawing(shipId: string, drawingId: string, updates: Partial<Drawing>): Promise<void> {
+    try {
+      const shipRef = doc(db, this.COLLECTION, shipId);
+      const drawingRef = doc(collection(shipRef, this.DRAWINGS_SUBCOLLECTION), drawingId);
+      
+      const updateData = {
+        ...updates,
+        updatedAt: new Date(),
+      };
+      
+      await updateDoc(drawingRef, updateData);
+    } catch (error) {
+      console.error('Error updating drawing:', error);
+      throw error;
+    }
+  }
+
+  static async deleteDrawing(shipId: string, drawingId: string): Promise<void> {
+    try {
+      const shipRef = doc(db, this.COLLECTION, shipId);
+      const drawingRef = doc(collection(shipRef, this.DRAWINGS_SUBCOLLECTION), drawingId);
+      
+      await deleteDoc(drawingRef);
+    } catch (error) {
+      console.error('Error deleting drawing:', error);
       throw error;
     }
   }
