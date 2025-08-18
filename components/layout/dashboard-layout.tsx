@@ -104,7 +104,7 @@ function Sidebar({ className }: { className?: string }) {
               <Ship className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">Ship Manager</h2>
+              <h2 className="text-lg font-semibold text-slate-800">VMS 361</h2>
               <p className="text-xs text-slate-600">Global Fleet Control</p>
             </div>
           </div>
