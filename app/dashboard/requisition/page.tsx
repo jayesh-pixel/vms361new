@@ -35,7 +35,10 @@ import {
   Package,
   DollarSign,
   TrendingUp,
-  Building
+  Building,
+  ImageIcon,
+  FileIcon,
+  X
 } from "lucide-react"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useRequisitions } from "@/hooks/use-requisitions"
@@ -63,7 +66,13 @@ const requisitionSchema = z.object({
     quantity: z.number().min(1, "Quantity must be at least 1"),
     unit: z.string().min(1, "Unit is required"),
     estimatedPrice: z.number().min(0, "Price must be positive").optional()
-  })).min(1, "At least one item is required")
+  })).min(1, "At least one item is required"),
+  attachments: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    type: z.enum(["image", "pdf", "document"]),
+    size: z.number()
+  })).optional()
 })
 
 const vendorSchema = z.object({
@@ -111,6 +120,8 @@ export default function RequisitionPage() {
   const [selectedRequisition, setSelectedRequisition] = useState<any>(null)
   const [showViewDialog, setShowViewDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [fileUploadError, setFileUploadError] = useState<string>("")
 
   const requisitionForm = useForm<z.infer<typeof requisitionSchema>>({
     resolver: zodResolver(requisitionSchema),
@@ -120,7 +131,8 @@ export default function RequisitionPage() {
       type: "material",
       department: "",
       priority: "medium",
-      items: [{ name: "", description: "", quantity: 1, unit: "", estimatedPrice: 0 }]
+      items: [{ name: "", description: "", quantity: 1, unit: "", estimatedPrice: 0 }],
+      attachments: []
     }
   })
 
@@ -159,6 +171,77 @@ export default function RequisitionPage() {
     loadVendors()
   }, [userPermissions])
 
+  // File upload handlers
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    const validFiles: File[] = []
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    
+    files.forEach(file => {
+      // Check file type
+      const isValidType = file.type.startsWith('image/') || 
+                         file.type === 'application/pdf' ||
+                         file.type.startsWith('application/') ||
+                         file.type.startsWith('text/')
+      
+      // Check file size
+      const isValidSize = file.size <= maxSize
+      
+      if (!isValidType) {
+        setFileUploadError(`File "${file.name}" is not a supported file type. Please upload images, PDFs, or documents.`)
+        return
+      }
+      
+      if (!isValidSize) {
+        setFileUploadError(`File "${file.name}" is too large. Maximum size is 10MB.`)
+        return
+      }
+      
+      validFiles.push(file)
+    })
+    
+    if (validFiles.length > 0) {
+      setUploadedFiles(prev => [...prev, ...validFiles])
+      setFileUploadError("")
+      
+      // Update form with file information
+      const newAttachments = validFiles.map(file => ({
+        name: file.name,
+        url: URL.createObjectURL(file), // Temporary URL for preview
+        type: file.type.startsWith('image/') ? 'image' as const : 
+              file.type === 'application/pdf' ? 'pdf' as const : 'document' as const,
+        size: file.size
+      }))
+      
+      const currentAttachments = requisitionForm.getValues('attachments') || []
+      requisitionForm.setValue('attachments', [...currentAttachments, ...newAttachments])
+    }
+  }
+  
+  const removeFile = (index: number) => {
+    const currentFiles = [...uploadedFiles]
+    const currentAttachments = requisitionForm.getValues('attachments') || []
+    
+    // Remove file from state
+    currentFiles.splice(index, 1)
+    setUploadedFiles(currentFiles)
+    
+    // Remove attachment from form
+    const newAttachments = [...currentAttachments]
+    newAttachments.splice(index, 1)
+    requisitionForm.setValue('attachments', newAttachments)
+  }
+  
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) {
+      return <ImageIcon className="h-4 w-4 text-blue-500" />
+    } else if (fileType === 'application/pdf') {
+      return <FileIcon className="h-4 w-4 text-red-500" />
+    } else {
+      return <FileText className="h-4 w-4 text-gray-500" />
+    }
+  }
+
   const handleCreateRequisition = async (data: z.infer<typeof requisitionSchema>) => {
     try {
       console.log("Creating requisition with data:", data)
@@ -181,7 +264,6 @@ export default function RequisitionPage() {
           unit: item.unit,
           unitPrice: item.estimatedPrice || 0,
           totalPrice: (item.estimatedPrice || 0) * item.quantity,
-          preferredVendor: undefined,
           alternateVendors: [],
           urgencyLevel: data.priority === "urgent" ? "urgent" : "standard",
           approved: false
@@ -192,11 +274,10 @@ export default function RequisitionPage() {
         currency: "USD",
         suggestedVendors: [],
         quotes: [],
-        attachments: [],
+        attachments: data.attachments?.map(att => att.url) || [],
         requestDate: new Date(),
         requestedBy: user?.uid || "system",
-        companyId: userPermissions?.companyId || "default",
-        shipId: undefined
+        companyId: userPermissions?.companyId || "default"
       })
       
       console.log("Requisition created with ID:", reqId)
@@ -207,6 +288,8 @@ export default function RequisitionPage() {
       toast.success("Requisition created successfully")
       setShowCreateRequisitionDialog(false)
       requisitionForm.reset()
+      setUploadedFiles([])
+      setFileUploadError("")
     } catch (error: any) {
       console.error("Failed to create requisition:", error)
       toast.error("Failed to create requisition: " + error.message)
@@ -272,6 +355,11 @@ export default function RequisitionPage() {
 
   const handleEditRequisition = (requisition: any) => {
     setSelectedRequisition(requisition)
+    
+    // Reset file uploads
+    setUploadedFiles([])
+    setFileUploadError("")
+    
     // Pre-populate the form with existing data
     requisitionForm.reset({
       title: requisition.title,
@@ -286,7 +374,15 @@ export default function RequisitionPage() {
         quantity: item.quantity,
         unit: item.unit,
         estimatedPrice: item.unitPrice || 0
-      }))
+      })),
+      attachments: requisition.attachments ? requisition.attachments.map((url: string) => ({
+        name: url.split('/').pop() || 'attachment',
+        url: url,
+        type: url.toLowerCase().includes('.pdf') ? 'pdf' as const : 
+              url.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i) ? 'image' as const : 
+              'document' as const,
+        size: 0
+      })) : []
     })
     setShowEditDialog(true)
   }
@@ -348,16 +444,19 @@ export default function RequisitionPage() {
           unit: item.unit,
           unitPrice: item.estimatedPrice || 0,
           totalPrice: (item.estimatedPrice || 0) * item.quantity,
-          preferredVendor: selectedRequisition.items[index]?.preferredVendor || null,
+          preferredVendor: selectedRequisition.items[index]?.preferredVendor,
           alternateVendors: selectedRequisition.items[index]?.alternateVendors || [],
           urgencyLevel: data.priority === "urgent" ? "urgent" : "standard",
           approved: selectedRequisition.items[index]?.approved || false
         })),
         totalCost: data.items.reduce((sum, item) => sum + ((item.estimatedPrice || 0) * item.quantity), 0),
+        attachments: data.attachments?.map(att => att.url) || []
       })
       
       toast.success("Requisition updated successfully")
       setShowEditDialog(false)
+      setUploadedFiles([])
+      setFileUploadError("")
       await loadRequisitions()
     } catch (error: any) {
       console.error("Failed to update requisition:", error)
@@ -520,26 +619,7 @@ export default function RequisitionPage() {
                                 {/* Fancy Calendar Picker */}
                                 <Popover>
                                   <PopoverTrigger asChild>
-                                    <Button
-                                      variant={"outline"}
-                                      className={cn(
-                                        "w-full pl-3 text-left font-normal",
-                                        !field.value && "text-muted-foreground"
-                                      )}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        console.log("Calendar button clicked!");
-                                      }}
-                                    >
-                                      {field.value ? (
-                                        format(field.value, "PPP")
-                                      ) : (
-                                        <span>Pick a date</span>
-                                      )}
-                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                    </Button>
+                                    
                                   </PopoverTrigger>
                                   <PopoverContent className="w-auto p-0" align="start">
                                     <Calendar
@@ -573,7 +653,6 @@ export default function RequisitionPage() {
                                   className="text-sm"
                                   placeholder="Or use this date input"
                                 />
-                                <p className="text-xs text-gray-500">Use either the calendar button above or the date input below</p>
                               </div>
                               <FormMessage />
                             </FormItem>
@@ -674,6 +753,74 @@ export default function RequisitionPage() {
                           <Plus className="h-4 w-4 mr-2" />
                           Add Item
                         </Button>
+                      </div>
+
+                      {/* File Upload Section */}
+                      <div className="space-y-3">
+                        <label className="text-sm font-medium">Attachments (Images, PDFs, Documents)</label>
+                        
+                        {/* File Upload Input */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                          <input
+                            type="file"
+                            id="file-upload"
+                            multiple
+                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                          <label htmlFor="file-upload" className="cursor-pointer">
+                            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600 mb-1">
+                              <span className="font-medium text-blue-600 hover:text-blue-500">
+                                Click to upload
+                              </span> or drag and drop
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Images, PDFs, Documents (Max 10MB each)
+                            </p>
+                          </label>
+                        </div>
+
+                        {/* Error Message */}
+                        {fileUploadError && (
+                          <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                            {fileUploadError}
+                          </div>
+                        )}
+
+                        {/* Uploaded Files List */}
+                        {uploadedFiles.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-gray-500 uppercase">Uploaded Files</label>
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {uploadedFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    {getFileIcon(file.type)}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-gray-900 truncate">
+                                        {file.name}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeFile(index)}
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-end gap-2">
@@ -1117,7 +1264,6 @@ export default function RequisitionPage() {
                 <CardTitle>Vendor Management</CardTitle>
               </CardHeader>
               <CardContent>
-                // ...existing code...
                 
                 {vendors.length > 0 ? (
                   <Table>
@@ -1361,6 +1507,62 @@ export default function RequisitionPage() {
                     </Table>
                   </div>
                 </div>
+
+                {/* Attachments Section */}
+                {selectedRequisition.attachments && selectedRequisition.attachments.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Attachments</label>
+                    <div className="mt-2 grid grid-cols-1 gap-3">
+                      {selectedRequisition.attachments.map((attachment: string, index: number) => {
+                        const fileName = attachment.split('/').pop() || `attachment-${index + 1}`
+                        const fileType = attachment.toLowerCase().includes('.pdf') ? 'application/pdf' : 
+                                        attachment.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i) ? 'image' : 
+                                        'document'
+                        
+                        return (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                            <div className="flex items-center gap-3">
+                              {getFileIcon(fileType)}
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{fileName}</p>
+                                <p className="text-xs text-gray-500">
+                                  {fileType === 'application/pdf' ? 'PDF Document' : 
+                                   fileType === 'image' ? 'Image File' : 
+                                   'Document'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {fileType === 'image' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(attachment, '_blank')}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Preview
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const link = document.createElement('a')
+                                  link.href = attachment
+                                  link.download = fileName
+                                  link.click()
+                                }}
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>
@@ -1599,6 +1801,74 @@ export default function RequisitionPage() {
                     <Plus className="h-4 w-4 mr-2" />
                     Add Item
                   </Button>
+                </div>
+
+                {/* File Upload Section for Edit */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium">Attachments (Images, PDFs, Documents)</label>
+                  
+                  {/* File Upload Input */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                    <input
+                      type="file"
+                      id="file-upload-edit"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <label htmlFor="file-upload-edit" className="cursor-pointer">
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-1">
+                        <span className="font-medium text-blue-600 hover:text-blue-500">
+                          Click to upload
+                        </span> or drag and drop
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Images, PDFs, Documents (Max 10MB each)
+                      </p>
+                    </label>
+                  </div>
+
+                  {/* Error Message */}
+                  {fileUploadError && (
+                    <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                      {fileUploadError}
+                    </div>
+                  )}
+
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-gray-500 uppercase">Uploaded Files</label>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {uploadedFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {getFileIcon(file.type)}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {file.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFile(index)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-2">

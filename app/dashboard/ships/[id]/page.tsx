@@ -177,12 +177,21 @@ export default function ShipDetailPage() {
 
   // Find current ship
   useEffect(() => {
+    if (!ships || ships.length === 0 || !shipId) {
+      return // Wait for ships to load or ensure shipId is available
+    }
+    
     const ship = ships.find(s => s.id === shipId)
     if (ship) {
       setCurrentShip(ship)
       loadShipData(shipId)
+    } else {
+      // Ship not found, redirect or show error
+      console.warn("Ship not found:", shipId, "Available ships:", ships.map(s => s.id))
+      toast.error("Ship not found")
+      router.push("/dashboard/ships")
     }
-  }, [ships, shipId, setCurrentShip])
+  }, [ships, shipId, router]) // Removed setCurrentShip to prevent infinite loop
 
   const loadShipData = async (id: string) => {
     setLoadingData(true)
@@ -380,12 +389,15 @@ export default function ShipDetailPage() {
   }
 
   const handleOptionToggle = (fieldName: string, option: string) => {
-    setSelectedOptions(prev => ({
-      ...prev,
-      [fieldName]: prev[fieldName].includes(option) 
-        ? prev[fieldName].filter(item => item !== option)
-        : [...prev[fieldName], option]
-    }))
+    setSelectedOptions(prev => {
+      const currentOptions = prev[fieldName] || [] // Safety check to prevent undefined
+      return {
+        ...prev,
+        [fieldName]: currentOptions.includes(option) 
+          ? currentOptions.filter(item => item !== option)
+          : [...currentOptions, option]
+      }
+    })
   }
 
   const handleAddCustomField = async (fieldName: string) => {
@@ -579,7 +591,7 @@ export default function ShipDetailPage() {
     }
   }
 
-  if (isLoading || loadingData) {
+  if (isLoading || loadingData || !ships) {
     return (
       <DashboardLayout currentPage="ships">
         <div className="flex items-center justify-center h-96">
@@ -1700,7 +1712,7 @@ export default function ShipDetailPage() {
                         <label key={option} className="flex items-center space-x-2 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={selectedOptions[fieldName].includes(option)}
+                            checked={(selectedOptions[fieldName] || []).includes(option)}
                             onChange={() => handleOptionToggle(fieldName, option)}
                             className="rounded"
                           />
@@ -1730,7 +1742,7 @@ export default function ShipDetailPage() {
                       </div>
                     </div>
                   </div>
-                  {selectedOptions[fieldName].length > 0 && (
+                  {(selectedOptions[fieldName] && selectedOptions[fieldName].length > 0) && (
                     <div className="text-xs text-green-600">
                       Selected: {selectedOptions[fieldName].join(', ')}
                     </div>
@@ -1834,7 +1846,7 @@ export default function ShipDetailPage() {
                         <input
                           type="checkbox"
                           id={`category-${cat}`}
-                          checked={selectedOptions.category.includes(cat)}
+                          checked={(selectedOptions.category || []).includes(cat)}
                           onChange={() => handleOptionToggle('category', cat)}
                         />
                         <label htmlFor={`category-${cat}`} className="text-sm">{cat}</label>
@@ -1857,7 +1869,7 @@ export default function ShipDetailPage() {
                       Add
                     </Button>
                   </div>
-                  {selectedOptions.category.length > 0 && (
+                  {(selectedOptions.category && selectedOptions.category.length > 0) && (
                     <div className="mt-2 text-sm text-green-600">
                       Selected: {selectedOptions.category.join(', ')}
                     </div>
@@ -1951,7 +1963,7 @@ export default function ShipDetailPage() {
                           <input
                             type="checkbox"
                             id={`${fieldName}-${option}`}
-                            checked={selectedOptions[fieldName].includes(option)}
+                            checked={(selectedOptions[fieldName] || []).includes(option)}
                             onChange={() => handleOptionToggle(fieldName, option)}
                             className="rounded"
                           />

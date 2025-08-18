@@ -232,7 +232,9 @@ export class ShipService {
       const referencesSnapshot = await getDocs(crewReferencesQuery);
       
       // Get crew IDs from references
-      const crewIds = referencesSnapshot.docs.map(doc => doc.data().crewId);
+      const crewIds = referencesSnapshot.docs
+        .map(doc => doc.data().crewId)
+        .filter(id => id && typeof id === 'string'); // Filter out undefined/invalid IDs
       
       if (crewIds.length === 0) {
         return [];
@@ -242,6 +244,7 @@ export class ShipService {
       const crewMembers: CrewMember[] = [];
       
       for (const crewId of crewIds) {
+        if (!crewId) continue; // Additional safety check
         const crewDoc = await getDoc(doc(db, this.CREW_COLLECTION, crewId));
         if (crewDoc.exists()) {
           const data = crewDoc.data();
