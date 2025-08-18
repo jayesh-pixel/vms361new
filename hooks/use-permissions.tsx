@@ -20,6 +20,7 @@ export interface PermissionHookType {
   canManageInventory: () => boolean;
   canCreateRequisition: () => boolean;
   canApproveRequisition: () => boolean;
+  canManageVendors: () => boolean;
   canCreateTask: () => boolean;
   canManageUsers: () => boolean;
   canViewReports: () => boolean;
@@ -91,6 +92,9 @@ export function usePermissions(): PermissionHookType {
   // Requisition permissions
   const canCreateRequisition = (): boolean => hasPermission('create', 'requisition');
   const canApproveRequisition = (): boolean => hasPermission('approve', 'requisition');
+  
+  // Vendor permissions
+  const canManageVendors = (): boolean => hasPermission('create', 'vendor') || hasPermission('update', 'vendor') || isProcurement() || isAdmin() || isOwner();
 
   // Task permissions
   const canCreateTask = (): boolean => hasPermission('create', 'task');
@@ -120,6 +124,7 @@ export function usePermissions(): PermissionHookType {
     canManageInventory,
     canCreateRequisition,
     canApproveRequisition,
+    canManageVendors,
     canCreateTask,
     canManageUsers,
     canViewReports,

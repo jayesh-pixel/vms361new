@@ -1,5 +1,14 @@
 // Global Ship and Crew Management System Types
 
+// Re-export all ship-related types
+export * from './ships'
+// Re-export all IAM types
+export * from './iam'
+// Re-export all job types
+export * from './jobs'
+// Re-export all requisition and procurement types
+export * from './requisition'
+
 export interface User {
   id: string
   email: string

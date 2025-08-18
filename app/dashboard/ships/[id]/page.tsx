@@ -636,7 +636,7 @@ export default function ShipDetailPage() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
@@ -673,7 +673,18 @@ export default function ShipDetailPage() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
-                <CheckSquare className="h-5 w-5 text-orange-600" />
+                <ClipboardList className="h-5 w-5 text-orange-600" />
+                <div>
+                  <p className="text-2xl font-bold">{requisitions.length}</p>
+                  <p className="text-xs text-gray-600">Requisitions</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <CheckSquare className="h-5 w-5 text-teal-600" />
                 <div>
                   <p className="text-2xl font-bold">{tasks.length}</p>
                   <p className="text-xs text-gray-600">Active Tasks</p>
@@ -987,14 +998,23 @@ export default function ShipDetailPage() {
           <TabsContent value="requisitions" className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Requisitions</h3>
-              <Button onClick={() => setShowAddRequisitionDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Requisition
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/ships/${shipId}/requisitions`)}
+                >
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Manage Ship Requisitions
+                </Button>
+                <Button onClick={() => setShowAddRequisitionDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Quick Requisition
+                </Button>
+              </div>
             </div>
 
             <div className="grid gap-4">
-              {requisitions.map((req) => (
+              {requisitions.slice(0, 3).map((req) => (
                 <Card key={req.id}>
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start">
@@ -1027,13 +1047,35 @@ export default function ShipDetailPage() {
                   </CardContent>
                 </Card>
               ))}
-              {requisitions.length === 0 && (
+              {requisitions.length === 0 ? (
                 <Card>
                   <CardContent className="p-8 text-center">
                     <ClipboardList className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                     <h4 className="text-lg font-semibold">No Requisitions</h4>
-                    <p className="text-gray-600 mb-4">Create requisitions to request materials or services.</p>
-                    <Button onClick={() => setShowAddRequisitionDialog(true)}>Create First Requisition</Button>
+                    <p className="text-gray-600 mb-4">Create requisitions to request materials or services for this ship.</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={() => setShowAddRequisitionDialog(true)}>Quick Requisition</Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => router.push(`/dashboard/ships/${shipId}/requisitions`)}
+                      >
+                        Manage Requisitions
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : requisitions.length > 3 && (
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-gray-600 mb-3">
+                      Showing {Math.min(3, requisitions.length)} of {requisitions.length} requisitions
+                    </p>
+                    <Button 
+                      variant="outline"
+                      onClick={() => router.push(`/dashboard/ships/${shipId}/requisitions`)}
+                    >
+                      View All Requisitions
+                    </Button>
                   </CardContent>
                 </Card>
               )}
