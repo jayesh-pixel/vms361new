@@ -2210,16 +2210,7 @@ export default function ShipDetailPage() {
                   onChange={(e) => setNewRequisition(prev => ({...prev, requiredDate: e.target.value}))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="req-cost">Estimated Cost ($)</Label>
-                <Input
-                  id="req-cost"
-                  type="number"
-                  step="0.01"
-                  value={newRequisition.estimatedCost}
-                  onChange={(e) => setNewRequisition(prev => ({...prev, estimatedCost: e.target.value}))}
-                />
-              </div>
+          
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setShowAddRequisitionDialog(false)}>
                   Cancel
