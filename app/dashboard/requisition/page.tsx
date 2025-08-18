@@ -1117,15 +1117,7 @@ export default function RequisitionPage() {
                 <CardTitle>Vendor Management</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Debug info */}
-                <div className="mb-4 p-2 bg-gray-100 rounded text-sm">
-                  <p>Debug: Vendors count: {vendors.length}</p>
-                  <p>Debug: Loading: {loading.toString()}</p>
-                  <p>Debug: Error: {error || 'none'}</p>
-                  {vendors.length > 0 && (
-                    <p>Debug: First vendor: {vendors[0].name} - {vendors[0].vendorId}</p>
-                  )}
-                </div>
+                // ...existing code...
                 
                 {vendors.length > 0 ? (
                   <Table>
