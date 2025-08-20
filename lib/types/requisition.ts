@@ -82,6 +82,23 @@ export type RequisitionType = 'purchase' | 'service' | 'work' | 'transfer' | 'ot
 export interface ExtendedRequisition {
   id: string;
   prNumber: string; // PR Number (Auto-generated)
+  
+  // New fields for enhanced requisition
+  reqsnNumber?: string; // New requisition number format (TROY-SOT-V250024)
+  catalogue?: string; // Miscellaneous, Engine Spares, etc.
+  model?: string; // Equipment model
+  dateSent?: Date; // Date when requisition was sent
+  deliveryDate?: Date; // Expected delivery date
+  deliveryPort?: string; // Port for delivery
+  currentStatus?: string; // New status field
+  vesselRemarks?: string; // Free-text remarks
+  createdDate?: Date; // Created date
+  maintenanceType?: string; // Regular Maintenance or Breakdown
+  sparesChecked?: string; // Yes/No for spares check
+  machineryEquipment?: string; // Related machinery/equipment
+  requisitionType?: string; // Piece-Meal, Bulk Order, etc.
+  
+  // Original fields
   type: RequisitionType;
   title: string;
   description?: string;

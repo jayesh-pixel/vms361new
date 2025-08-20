@@ -43,7 +43,7 @@ import {
 import { usePermissions } from "@/hooks/use-permissions"
 import { useRequisitions } from "@/hooks/use-requisitions"
 import { useAuth } from "@/hooks/use-auth"
-import { RequisitionType } from "@/lib/types/ships"
+import { ExtendedRequisition, RequisitionType } from "@/lib/types/requisition"
 import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -54,11 +54,34 @@ import { toast } from "sonner"
 
 // Form schemas
 const requisitionSchema = z.object({
+  // Basic Information
+  reqsnNumber: z.string().optional(), // Will be auto-generated
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
-  type: z.enum(["material", "service"]),
   department: z.string().min(1, "Department is required"),
+  catalogue: z.enum(["Miscellaneous", "Engine Spares", "Deck Equipment", "Safety Equipment", "Navigation Equipment", "Other"]),
+  model: z.string().optional(),
+  type: z.enum(["Piece-Meal", "Bulk Order", "Emergency", "Regular"]),
+  
+  // Dates
+  dateSent: z.date().optional(),
+  deliveryDate: z.date(),
   requiredDate: z.date(),
+  deliveryPort: z.string().min(1, "Delivery port is required"),
+  
+  // Status
+  currentStatus: z.enum(["New Requisition", "Under Review", "Approved", "Ordered", "Shipped", "Delivered", "Rejected"]),
+  
+  // Vessel Requisition Details
+  vesselRemarks: z.string().optional(),
+  createdDate: z.date().optional(),
+  
+  // Questions
+  maintenanceType: z.enum(["Regular Maintenance", "Breakdown"]),
+  sparesChecked: z.enum(["Yes", "No"]),
+  machineryEquipment: z.string().optional(),
+  
+  // Legacy fields for compatibility
   priority: z.enum(["low", "medium", "high", "urgent"]),
   items: z.array(z.object({
     name: z.string().min(1, "Item name is required"),
@@ -126,10 +149,23 @@ export default function RequisitionPage() {
   const requisitionForm = useForm<z.infer<typeof requisitionSchema>>({
     resolver: zodResolver(requisitionSchema),
     defaultValues: {
+      reqsnNumber: "",
       title: "",
       description: "",
-      type: "material",
       department: "",
+      catalogue: "Miscellaneous",
+      model: "",
+      type: "Piece-Meal",
+      dateSent: new Date(),
+      deliveryDate: new Date(),
+      requiredDate: new Date(),
+      deliveryPort: "",
+      currentStatus: "New Requisition",
+      vesselRemarks: "",
+      createdDate: new Date(),
+      maintenanceType: "Regular Maintenance",
+      sparesChecked: "No",
+      machineryEquipment: "",
       priority: "medium",
       items: [{ name: "", description: "", quantity: 1, unit: "", estimatedPrice: 0 }],
       attachments: []
@@ -248,12 +284,43 @@ export default function RequisitionPage() {
       console.log("User:", user)
       console.log("Can create requisition:", canCreateRequisition())
       
+      // Generate requisition number
+      const currentDate = new Date()
+      const year = currentDate.getFullYear().toString().substr(-2)
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+      const reqNumber = `TROY-SOT-V${year}${month}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
+      
       const reqId = await createRequisition({
+        // Basic Information
+        reqsnNumber: reqNumber,
         title: data.title,
         description: data.description,
-        type: data.type === 'material' ? 'purchase' : data.type,
         department: data.department,
+        catalogue: data.catalogue,
+        model: data.model,
+        // Store original type in a custom field and use legacy type for compatibility
+        requisitionType: data.type, // Store the new type value
+        type: 'purchase' as RequisitionType, // Use compatible type for system
+        
+        // Dates
+        dateSent: data.dateSent,
+        deliveryDate: data.deliveryDate,
         requiredDate: data.requiredDate,
+        deliveryPort: data.deliveryPort,
+        
+        // Status
+        currentStatus: data.currentStatus,
+        
+        // Vessel Requisition Details
+        vesselRemarks: data.vesselRemarks,
+        createdDate: data.createdDate || new Date(),
+        
+        // Questions
+        maintenanceType: data.maintenanceType,
+        sparesChecked: data.sparesChecked,
+        machineryEquipment: data.machineryEquipment,
+        
+        // Legacy compatibility fields
         priority: data.priority,
         items: data.items.map((item, index) => ({
           id: `item-${Date.now()}-${index}`,
@@ -285,7 +352,7 @@ export default function RequisitionPage() {
       // Reload requisitions to update the UI
       await loadRequisitions()
       
-      toast.success("Requisition created successfully")
+      toast.success(`Requisition created successfully with number: ${reqNumber}`)
       setShowCreateRequisitionDialog(false)
       requisitionForm.reset()
       setUploadedFiles([])
@@ -362,12 +429,35 @@ export default function RequisitionPage() {
     
     // Pre-populate the form with existing data
     requisitionForm.reset({
+      // Basic Information
+      reqsnNumber: requisition.reqsnNumber || requisition.prNumber,
       title: requisition.title,
       description: requisition.description,
-      type: requisition.type,
       department: requisition.department,
-      priority: requisition.priority,
+      catalogue: requisition.catalogue || "Miscellaneous",
+      model: requisition.model || "",
+      type: requisition.type,
+      
+      // Dates
+      dateSent: requisition.dateSent ? new Date(requisition.dateSent) : new Date(),
+      deliveryDate: requisition.deliveryDate ? new Date(requisition.deliveryDate) : new Date(requisition.requiredDate),
       requiredDate: new Date(requisition.requiredDate),
+      deliveryPort: requisition.deliveryPort || "",
+      
+      // Status
+      currentStatus: requisition.currentStatus || requisition.status || "New Requisition",
+      
+      // Vessel Requisition Details
+      vesselRemarks: requisition.vesselRemarks || "",
+      createdDate: requisition.createdDate ? new Date(requisition.createdDate) : new Date(),
+      
+      // Questions
+      maintenanceType: requisition.maintenanceType || "Regular Maintenance",
+      sparesChecked: requisition.sparesChecked || "No",
+      machineryEquipment: requisition.machineryEquipment || "",
+      
+      // Legacy fields
+      priority: requisition.priority,
       items: requisition.items.map((item: any) => ({
         name: item.name,
         description: item.description || "",
@@ -431,7 +521,8 @@ export default function RequisitionPage() {
       await updateRequisition(selectedRequisition.id, {
         title: data.title,
         description: data.description,
-        type: data.type === 'material' ? 'purchase' : data.type,
+        // Legacy compatibility fields - map new types to old system
+        type: 'purchase' as RequisitionType,
         department: data.department,
         priority: data.priority,
         requiredDate: data.requiredDate,
@@ -521,43 +612,133 @@ export default function RequisitionPage() {
                   </DialogHeader>
                   <Form {...requisitionForm}>
                     <form onSubmit={requisitionForm.handleSubmit(handleCreateRequisition)} className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={requisitionForm.control}
-                          name="title"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Title</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Requisition title" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={requisitionForm.control}
-                          name="type"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Type</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      {/* Basic Information Section */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Basic Information</h3>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={requisitionForm.control}
+                            name="title"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Requisition Title</FormLabel>
                                 <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select type" />
-                                  </SelectTrigger>
+                                  <Input placeholder="e.g., MAC Main Switch" {...field} />
                                 </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="material">Material Requisition</SelectItem>
-                                  <SelectItem value="service">Service Requisition</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="department"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Department</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select department" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Engine Spares">Engine Spares</SelectItem>
+                                    <SelectItem value="Deck Spares">Deck Spares</SelectItem>
+                                    <SelectItem value="Other Spares">Other Spares</SelectItem>
+                                    <SelectItem value="Safety Equipment">Safety Equipment</SelectItem>
+                                    <SelectItem value="Navigation Equipment">Navigation Equipment</SelectItem>
+                                    <SelectItem value="Catering">Catering</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={requisitionForm.control}
+                            name="catalogue"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Catalogue</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select catalogue" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Miscellaneous">Miscellaneous</SelectItem>
+                                    <SelectItem value="Engine Spares">Engine Spares</SelectItem>
+                                    <SelectItem value="Deck Equipment">Deck Equipment</SelectItem>
+                                    <SelectItem value="Safety Equipment">Safety Equipment</SelectItem>
+                                    <SelectItem value="Navigation Equipment">Navigation Equipment</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="model"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Model</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="e.g., Diesel Doctor D" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={requisitionForm.control}
+                            name="type"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Requisition Type</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Piece-Meal">Piece-Meal</SelectItem>
+                                    <SelectItem value="Bulk Order">Bulk Order</SelectItem>
+                                    <SelectItem value="Emergency">Emergency</SelectItem>
+                                    <SelectItem value="Regular">Regular</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="deliveryPort"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Delivery Port</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="e.g., Itaqui" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                       </div>
-                      
+
+                      {/* Description */}
                       <FormField
                         control={requisitionForm.control}
                         name="description"
@@ -572,88 +753,187 @@ export default function RequisitionPage() {
                         )}
                       />
 
-                      <div className="grid grid-cols-3 gap-4">
+                      {/* Dates Section */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Important Dates</h3>
+                        
+                        <div className="grid grid-cols-3 gap-4">
+                          <FormField
+                            control={requisitionForm.control}
+                            name="dateSent"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Date Sent</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="date"
+                                    value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
+                                    onChange={(e) => {
+                                      const dateValue = e.target.value;
+                                      if (dateValue) {
+                                        field.onChange(new Date(dateValue));
+                                      }
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="deliveryDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Delivery Date</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="date"
+                                    value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
+                                    onChange={(e) => {
+                                      const dateValue = e.target.value;
+                                      if (dateValue) {
+                                        field.onChange(new Date(dateValue));
+                                      }
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="requiredDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Required Date</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="date"
+                                    value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
+                                    onChange={(e) => {
+                                      const dateValue = e.target.value;
+                                      if (dateValue) {
+                                        field.onChange(new Date(dateValue));
+                                      }
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Status Section */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Status Information</h3>
+                        
                         <FormField
                           control={requisitionForm.control}
-                          name="department"
+                          name="currentStatus"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Department</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Department" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={requisitionForm.control}
-                          name="priority"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Priority</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormLabel>Current Status</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Select priority" />
+                                    <SelectValue placeholder="Select status" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="low">Low</SelectItem>
-                                  <SelectItem value="medium">Medium</SelectItem>
-                                  <SelectItem value="high">High</SelectItem>
-                                  <SelectItem value="urgent">Urgent</SelectItem>
+                                  <SelectItem value="New Requisition">New Requisition</SelectItem>
+                                  <SelectItem value="Under Review">Under Review</SelectItem>
+                                  <SelectItem value="Approved">Approved</SelectItem>
+                                  <SelectItem value="Ordered">Ordered</SelectItem>
+                                  <SelectItem value="Shipped">Shipped</SelectItem>
+                                  <SelectItem value="Delivered">Delivered</SelectItem>
+                                  <SelectItem value="Rejected">Rejected</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+                      </div>
+
+                      {/* Vessel Requisition Section */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Vessel Requisition Details</h3>
+                        
                         <FormField
                           control={requisitionForm.control}
-                          name="requiredDate"
+                          name="vesselRemarks"
                           render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                              <FormLabel>Required Date</FormLabel>
-                              <div className="space-y-2">
-                                {/* Fancy Calendar Picker */}
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                      mode="single"
-                                      selected={field.value}
-                                      onSelect={(date) => {
-                                        console.log("Date selected:", date);
-                                        field.onChange(date);
-                                      }}
-                                      disabled={(date) => {
-                                        const today = new Date()
-                                        today.setHours(0, 0, 0, 0)
-                                        return date < today
-                                      }}
-                                      initialFocus
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                                
-                                {/* Fallback: Native Date Input */}
-                                <Input
-                                  type="date"
-                                  value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
-                                  onChange={(e) => {
-                                    const dateValue = e.target.value;
-                                    if (dateValue) {
-                                      field.onChange(new Date(dateValue));
-                                    }
-                                  }}
-                                  min={format(new Date(), "yyyy-MM-dd")}
-                                  className="text-sm"
-                                  placeholder="Or use this date input"
+                            <FormItem>
+                              <FormLabel>Vessel Requisition Remarks</FormLabel>
+                              <FormControl>
+                                <Textarea 
+                                  placeholder="Free-text remarks box (example: Created date: 08/Jan/2025)" 
+                                  {...field} 
                                 />
-                              </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={requisitionForm.control}
+                            name="maintenanceType"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Is this requisition related to regular maintenance or breakdown?</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Regular Maintenance">Regular Maintenance</SelectItem>
+                                    <SelectItem value="Breakdown">Breakdown</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={requisitionForm.control}
+                            name="sparesChecked"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Have you checked spares onboard and updated ROB?</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select answer" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Yes">Yes</SelectItem>
+                                    <SelectItem value="No">No</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <FormField
+                          control={requisitionForm.control}
+                          name="machineryEquipment"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Related to machinery/equipment?</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter machinery/equipment details" {...field} />
+                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1167,28 +1447,30 @@ export default function RequisitionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>PR Number</TableHead>
+                      <TableHead>Reqsn Number</TableHead>
                       <TableHead>Title</TableHead>
-                      <TableHead>Type</TableHead>
                       <TableHead>Department</TableHead>
+                      <TableHead>Catalogue</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Total Cost</TableHead>
-                      <TableHead>Required Date</TableHead>
+                      <TableHead>Delivery Date</TableHead>
+                      <TableHead>Delivery Port</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredRequisitions.map((req) => (
                       <TableRow key={req.id}>
-                        <TableCell className="font-medium">{req.prNumber}</TableCell>
+                        <TableCell className="font-medium">{req.reqsnNumber || req.prNumber}</TableCell>
                         <TableCell>{req.title}</TableCell>
-                        <TableCell className="capitalize">{req.type}</TableCell>
                         <TableCell>{req.department}</TableCell>
-                        <TableCell>{getStatusBadge(req.status)}</TableCell>
-                        <TableCell>{getPriorityBadge(req.priority)}</TableCell>
-                        <TableCell>${req.totalCost.toLocaleString()}</TableCell>
-                        <TableCell>{format(new Date(req.requiredDate), "MMM dd, yyyy")}</TableCell>
+                        <TableCell>{req.catalogue || 'N/A'}</TableCell>
+                        <TableCell>{req.model || 'N/A'}</TableCell>
+                        <TableCell className="capitalize">{req.requisitionType || req.type}</TableCell>
+                        <TableCell>{getStatusBadge(req.currentStatus || req.status)}</TableCell>
+                        <TableCell>{req.deliveryDate ? format(new Date(req.deliveryDate), "MMM dd, yyyy") : format(new Date(req.requiredDate), "MMM dd, yyyy")}</TableCell>
+                        <TableCell>{req.deliveryPort || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button 
@@ -1433,48 +1715,108 @@ export default function RequisitionPage() {
             </DialogHeader>
             {selectedRequisition && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">PR Number</label>
-                    <p className="text-lg font-semibold">{selectedRequisition.prNumber}</p>
+                {/* Basic Information Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Requisition Number</label>
+                      <p className="text-lg font-semibold">{selectedRequisition.reqsnNumber || selectedRequisition.prNumber}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Title</label>
+                      <p className="text-lg font-semibold">{selectedRequisition.title}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Department</label>
+                      <p>{selectedRequisition.department}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Catalogue</label>
+                      <p>{selectedRequisition.catalogue || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Model</label>
+                      <p>{selectedRequisition.model || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Requisition Type</label>
+                      <p className="capitalize">{selectedRequisition.requisitionType || selectedRequisition.type}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dates Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Important Dates</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Date Sent</label>
+                      <p>{selectedRequisition.dateSent ? format(new Date(selectedRequisition.dateSent), "PPP") : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Delivery Date</label>
+                      <p>{selectedRequisition.deliveryDate ? format(new Date(selectedRequisition.deliveryDate), "PPP") : format(new Date(selectedRequisition.requiredDate), "PPP")}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Required Date</label>
+                      <p>{format(new Date(selectedRequisition.requiredDate), "PPP")}</p>
+                    </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Status</label>
-                    <div className="mt-1">{getStatusBadge(selectedRequisition.status)}</div>
+                    <label className="text-sm font-medium text-gray-500">Delivery Port</label>
+                    <p>{selectedRequisition.deliveryPort || 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* Status Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Current Status Section</h3>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Current Status</label>
+                    <div className="mt-1">{getStatusBadge(selectedRequisition.currentStatus || selectedRequisition.status)}</div>
+                  </div>
+                </div>
+
+                {/* Vessel Requisition Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Vessel Requisition Remarks</h3>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Remarks</label>
+                    <p className="mt-1 p-3 bg-gray-50 rounded-md">{selectedRequisition.vesselRemarks || 'No remarks provided'}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Title</label>
-                    <p>{selectedRequisition.title}</p>
+                    <label className="text-sm font-medium text-gray-500">Created Date</label>
+                    <p>{selectedRequisition.createdDate ? format(new Date(selectedRequisition.createdDate), "PPP") : 'N/A'}</p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Type</label>
-                    <p className="capitalize">{selectedRequisition.type}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Department</label>
-                    <p>{selectedRequisition.department}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Priority</label>
-                    <div className="mt-1">{getPriorityBadge(selectedRequisition.priority)}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Required Date</label>
-                    <p>{format(new Date(selectedRequisition.requiredDate), "PPP")}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Total Cost</label>
-                    <p className="text-lg font-semibold">${selectedRequisition.totalCost.toLocaleString()}</p>
+                </div>
+
+                {/* Questions Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Questions</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Is this requisition related to regular maintenance or breakdown?</label>
+                      <p className="mt-1 font-semibold text-blue-600">{selectedRequisition.maintenanceType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Have you checked spares onboard and updated ROB?</label>
+                      <p className="mt-1 font-semibold text-green-600">{selectedRequisition.sparesChecked || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Related to machinery/equipment?</label>
+                      <p className="mt-1">{selectedRequisition.machineryEquipment || 'N/A'}</p>
+                    </div>
                   </div>
                 </div>
                 
                 <div>
                   <label className="text-sm font-medium text-gray-500">Description</label>
-                  <p className="mt-1">{selectedRequisition.description}</p>
+                  <p className="mt-1 p-3 bg-gray-50 rounded-md">{selectedRequisition.description}</p>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Items</label>
+                  <label className="text-sm font-medium text-gray-500">Items (Count: {selectedRequisition.items?.length || 0})</label>
                   <div className="mt-2">
                     <Table>
                       <TableHeader>
