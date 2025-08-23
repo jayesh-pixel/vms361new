@@ -6,6 +6,7 @@ import {
   deleteDoc, 
   getDoc, 
   getDocs, 
+  setDoc,
   query, 
   where, 
   orderBy, 
@@ -313,6 +314,7 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
+          id: doc.id, // Add the document ID
           ...data,
           issueDate: data.issueDate?.toDate(),
           expiryDate: data.expiryDate?.toDate(),
@@ -339,7 +341,7 @@ export class ShipService {
         updatedAt: new Date(),
       };
 
-      await addDoc(collection(shipRef, this.DRAWINGS_SUBCOLLECTION), newDrawing);
+      await setDoc(drawingRef, newDrawing);
       return drawingRef.id;
     } catch (error) {
       console.error('Error adding drawing:', error);
@@ -356,6 +358,7 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
+          id: doc.id, // Add the document ID
           ...data,
           createdAt: data.createdAt?.toDate(),
           updatedAt: data.updatedAt?.toDate(),
@@ -443,6 +446,7 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
+          id: doc.id, // Add the document ID
           ...data,
           lastStockUpdate: data.lastStockUpdate?.toDate(),
           createdAt: data.createdAt?.toDate(),
@@ -510,6 +514,7 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
+          id: doc.id, // Add the document ID
           ...data,
           requestDate: data.requestDate?.toDate(),
           requiredDate: data.requiredDate?.toDate(),
@@ -580,6 +585,7 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
+          id: doc.id, // Add the document ID
           ...data,
           dueDate: data.dueDate?.toDate(),
           completedAt: data.completedAt?.toDate(),

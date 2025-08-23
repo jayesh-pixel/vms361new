@@ -151,12 +151,19 @@ export default function ShipDetailPage() {
 
   const [newDrawing, setNewDrawing] = useState({
     name: "",
-    partNumber: "",
     description: "",
-    category: "",
-    version: "",
-    drawingNumber: "",
-    drawingType: "technical" as "technical" | "schematic" | "blueprint" | "diagram" | "manual"
+    partNumber: "",
+    quantity: 1,
+    category: "General" as "Equipment drawing" | "Engine drawing" | "General",
+    engineType: "",
+    spares: [] as Array<{
+      spareName: string;
+      make: string;
+      partNumber: string;
+      description: string;
+      quantity: number;
+      unit: string;
+    }>
   })
 
   // Certificate form state
@@ -175,15 +182,27 @@ export default function ShipDetailPage() {
   const [drawingUploadProgress, setDrawingUploadProgress] = useState<{[key: string]: number}>({})
   const [isDrawingUploading, setIsDrawingUploading] = useState(false)
   const [selectedDrawing, setSelectedDrawing] = useState<Drawing | null>(null)
+  
+  // Drawing creation workflow states
+  const [drawingStep, setDrawingStep] = useState(1) // 1: Basic Info, 2: Spare Parts, 3: File Upload
+  const [createdDrawingId, setCreatedDrawingId] = useState<string | null>(null)
   const [editingDrawing, setEditingDrawing] = useState({
     id: "",
     name: "",
-    partNumber: "",
     description: "",
-    category: "",
-    version: "",
-    drawingNumber: "",
-    drawingType: "technical" as "technical" | "schematic" | "blueprint" | "diagram" | "manual",
+    partNumber: "",
+    quantity: 1,
+    category: "General" as "Equipment drawing" | "Engine drawing" | "General",
+    engineType: "",
+    spares: [] as Array<{
+      id: string;
+      spareName: string;
+      make: string;
+      partNumber: string;
+      description: string;
+      quantity: number;
+      unit: string;
+    }>,
     documentUrl: "",
     thumbnailUrl: "",
     fileSize: 0,
@@ -587,44 +606,82 @@ export default function ShipDetailPage() {
   // Drawing CRUD handlers
   const handleAddDrawing = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newDrawing.name || !newDrawing.partNumber) {
-      toast.error("Please fill in required fields")
-      return
-    }
-
-    try {
-      setIsDrawingUploading(true)
-      
-      const drawingData: any = {
-        name: newDrawing.name,
-        partNumber: newDrawing.partNumber,
-        description: newDrawing.description || "",
-        category: newDrawing.category || "General",
-        version: newDrawing.version || "1.0",
-        drawingNumber: newDrawing.drawingNumber || newDrawing.partNumber,
-        drawingType: newDrawing.drawingType,
-        createdBy: user?.uid || ""
+    
+    if (drawingStep === 1) {
+      // Step 1: Create basic drawing info and move to next step
+      if (!newDrawing.name || !newDrawing.partNumber || !newDrawing.description) {
+        toast.error("Please fill in required fields")
+        return
       }
+      
+      try {
+        setIsDrawingUploading(true)
+        
+        const drawingData: any = {
+          name: newDrawing.name,
+          partNumber: newDrawing.partNumber,
+          description: newDrawing.description,
+          quantity: newDrawing.quantity,
+          category: newDrawing.category,
+          engineType: newDrawing.engineType || "",
+          spares: [],
+          createdBy: user?.uid || "",
+          createdAt: new Date()
+        }
 
-      await addDrawing(shipId, drawingData)
-      toast.success("Drawing added successfully")
+        const drawingId = await addDrawing(shipId, drawingData)
+        setCreatedDrawingId(drawingId)
+        setDrawingStep(2)
+        toast.success("Drawing created! Now add spare parts.")
+      } catch (error: any) {
+        toast.error("Failed to create drawing: " + error.message)
+      } finally {
+        setIsDrawingUploading(false)
+      }
+    } else if (drawingStep === 2) {
+      // Step 2: Update drawing with spare parts and move to file upload step
+      if (createdDrawingId && newDrawing.spares.length > 0) {
+        try {
+          setIsDrawingUploading(true)
+          
+          const updatedDrawingData: any = {
+            spares: newDrawing.spares,
+            updatedBy: user?.uid || "",
+            updatedAt: new Date()
+          }
+
+          await updateDrawing(shipId, createdDrawingId, updatedDrawingData)
+          setDrawingStep(3)
+          toast.success("Spare parts added! Now upload drawing files.")
+        } catch (error: any) {
+          toast.error("Failed to add spare parts: " + error.message)
+        } finally {
+          setIsDrawingUploading(false)
+        }
+      } else {
+        // Skip spare parts if none added
+        setDrawingStep(3)
+        toast.info("Skipped spare parts. Now upload drawing files.")
+      }
+    } else if (drawingStep === 3) {
+      // Step 3: Complete the process
       setShowAddDrawingDialog(false)
+      setDrawingStep(1)
+      setCreatedDrawingId(null)
       setNewDrawing({
         name: "",
-        partNumber: "",
         description: "",
-        category: "",
-        version: "",
-        drawingNumber: "",
-        drawingType: "technical"
+        partNumber: "",
+        quantity: 1,
+        category: "General",
+        engineType: "",
+        spares: []
       })
       setDrawingFiles([])
       setDrawingPreviews({})
+      
       loadShipData(shipId)
-    } catch (error: any) {
-      toast.error("Failed to add drawing: " + error.message)
-    } finally {
-      setIsDrawingUploading(false)
+      toast.success("Drawing creation completed!")
     }
   }
 
@@ -641,15 +698,34 @@ export default function ShipDetailPage() {
       partNumber: drawing.partNumber,
       description: drawing.description || "",
       category: drawing.category || "General",
-      version: drawing.version || "1.0",
-      drawingNumber: drawing.drawingNumber || drawing.partNumber,
-      drawingType: drawing.drawingType || "technical",
+      quantity: drawing.quantity || 1,
+      engineType: drawing.engineType || "",
+      spares: drawing.spares?.map(spare => ({
+        id: spare.id || `spare-${Date.now()}-${Math.random()}`,
+        spareName: spare.spareName,
+        make: spare.make || "",
+        partNumber: spare.partNumber,
+        description: spare.description || "",
+        quantity: spare.quantity || 1,
+        unit: spare.unit || "pcs"
+      })) || [],
       documentUrl: drawing.documentUrl || "",
       thumbnailUrl: drawing.thumbnailUrl || "",
       fileSize: drawing.fileSize || 0,
       fileType: drawing.fileType || "",
       createdAt: drawing.createdAt?.toISOString() || new Date().toISOString()
     })
+    
+    // Reset the new spare form
+    setNewSpare({
+      spareName: "",
+      make: "",
+      partNumber: "",
+      description: "",
+      quantity: 1,
+      unit: "pcs"
+    })
+    
     setShowEditDrawingDialog(true)
   }
 
@@ -668,9 +744,9 @@ export default function ShipDetailPage() {
         partNumber: editingDrawing.partNumber,
         description: editingDrawing.description || "",
         category: editingDrawing.category || "General",
-        version: editingDrawing.version || "1.0",
-        drawingNumber: editingDrawing.drawingNumber || editingDrawing.partNumber,
-        drawingType: editingDrawing.drawingType,
+        quantity: editingDrawing.quantity || 1,
+        engineType: editingDrawing.engineType || "",
+        spares: editingDrawing.spares || [],
         updatedBy: user?.uid || "",
         updatedAt: new Date()
       }
@@ -685,16 +761,27 @@ export default function ShipDetailPage() {
         name: "",
         partNumber: "",
         description: "",
-        category: "",
-        version: "",
-        drawingNumber: "",
-        drawingType: "technical",
+        category: "General" as "Equipment drawing" | "Engine drawing" | "General",
+        quantity: 1,
+        engineType: "",
+        spares: [],
         documentUrl: "",
         thumbnailUrl: "",
         fileSize: 0,
         fileType: "",
         createdAt: ""
       })
+      
+      // Reset new spare form
+      setNewSpare({
+        spareName: "",
+        make: "",
+        partNumber: "",
+        description: "",
+        quantity: 1,
+        unit: "pcs"
+      })
+      
       loadShipData(shipId)
     } catch (error: any) {
       toast.error("Failed to update drawing: " + error.message)
@@ -714,9 +801,17 @@ export default function ShipDetailPage() {
     try {
       // Call delete function from useShips hook
       await deleteDrawing(shipId, selectedDrawing.id)
+      
+      // Update local drawings state immediately
+      setDrawings(prevDrawings => 
+        prevDrawings.filter(drawing => drawing.id !== selectedDrawing.id)
+      )
+      
       toast.success("Drawing deleted successfully")
       setShowDeleteDrawingDialog(false)
       setSelectedDrawing(null)
+      
+      // Reload data to ensure consistency
       loadShipData(shipId)
     } catch (error: any) {
       toast.error("Failed to delete drawing: " + error.message)
@@ -785,6 +880,65 @@ export default function ShipDetailPage() {
         delete newPreviews[fileToRemove.name]
         return newPreviews
       })
+    }
+  }
+
+  // Spare part handling functions
+  const [newSpare, setNewSpare] = useState({
+    spareName: "",
+    make: "",
+    partNumber: "",
+    description: "",
+    quantity: 1,
+    unit: "pcs"
+  })
+
+  const handleAddSpare = () => {
+    if (!newSpare.spareName || !newSpare.make || !newSpare.partNumber) {
+      toast.error("Please fill in spare name, make, and part number")
+      return
+    }
+
+    const spare = {
+      ...newSpare,
+      id: `spare-${Date.now()}` // Generate unique ID
+    }
+
+    setNewDrawing(prev => ({
+      ...prev,
+      spares: [...prev.spares, spare]
+    }))
+
+    // Reset spare form
+    setNewSpare({
+      spareName: "",
+      make: "",
+      partNumber: "",
+      description: "",
+      quantity: 1,
+      unit: "pcs"
+    })
+
+    toast.success("Spare part added to list")
+  }
+
+  const handleRemoveSpare = (index: number) => {
+    setNewDrawing(prev => ({
+      ...prev,
+      spares: prev.spares.filter((_, i) => i !== index)
+    }))
+    toast.success("Spare part removed")
+  }
+
+  const handleGoToPrevStep = () => {
+    if (drawingStep > 1) {
+      setDrawingStep(drawingStep - 1)
+    }
+  }
+
+  const handleGoToNextStep = () => {
+    if (drawingStep < 3) {
+      setDrawingStep(drawingStep + 1)
     }
   }
 
@@ -1279,7 +1433,7 @@ export default function ShipDetailPage() {
           {/* Drawings Tab */}
           <TabsContent value="drawings" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Technical Drawings</h3>
+              <h3 className="text-lg font-semibold">Drawings</h3>
               <Button onClick={() => setShowAddDrawingDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Drawing
@@ -1289,56 +1443,121 @@ export default function ShipDetailPage() {
             <div className="grid gap-4">
               {drawings.map((drawing) => (
                 <Card key={drawing.id}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <PenTool className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold">{drawing.name}</h4>
-                          <p className="text-sm font-medium text-blue-600">
-                            Part Number: {drawing.partNumber}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Drawing No: {drawing.drawingNumber} • Version: {drawing.version}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {drawing.description}
-                          </p>
-                          <div className="flex items-center space-x-2 mt-2">
-                            <Badge variant="outline" className="text-xs">
-                              {drawing.category}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              {drawing.drawingType}
-                            </Badge>
-                            {drawing.fileType && (
-                              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
-                                {drawing.fileType.toUpperCase()}
-                              </Badge>
-                            )}
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      {/* Main Drawing Information */}
+                      <div className="border-b pb-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start space-x-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                              <PenTool className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-lg">{drawing.name}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{drawing.description}</p>
+                              <div className="grid grid-cols-3 gap-4 mt-3">
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase">Part Number</p>
+                                  <p className="text-sm font-medium text-blue-600">{drawing.partNumber}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase">Quantity</p>
+                                  <p className="text-sm font-medium">{drawing.quantity} Nos</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase">Category</p>
+                                  <Badge variant="outline" className="text-xs">
+                                    {drawing.category}
+                                  </Badge>
+                                </div>
+                              </div>
+                              {drawing.category === "Engine drawing" && drawing.engineType && (
+                                <div className="mt-2">
+                                  <p className="text-xs text-gray-500 uppercase">Engine Type</p>
+                                  <p className="text-sm font-medium text-green-600">{drawing.engineType}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {drawing.fileSize && (
-                            <p className="text-xs text-gray-400 mt-1">
-                              File size: {Math.round(drawing.fileSize / 1024)} KB
-                            </p>
-                          )}
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDrawing(drawing)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditDrawing(drawing)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDrawing(drawing)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </Button>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Spares with Drawing Section */}
+                      {drawing.spares && drawing.spares.length > 0 && (
+                        <div>
+                          <h5 className="font-medium text-gray-900 mb-3">Spare with Drawing</h5>
+                          <div className="grid gap-3">
+                            {drawing.spares.map((spare, index) => (
+                              <div key={spare.id || index} className="bg-gray-50 rounded-lg p-3">
+                                <div className="grid grid-cols-5 gap-3">
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Spare Name</p>
+                                    <p className="text-sm font-medium">{spare.spareName}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Make</p>
+                                    <p className="text-sm font-medium text-green-600">{spare.make || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Part Number</p>
+                                    <p className="text-sm font-medium text-blue-600">{spare.partNumber}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Quantity</p>
+                                    <p className="text-sm font-medium">{spare.quantity} {spare.unit}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Description</p>
+                                    <p className="text-sm text-gray-600">{spare.description || 'N/A'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Document Preview/Thumbnail */}
                       {(drawing.documentUrl || drawing.thumbnailUrl) && (
-                        <div className="ml-4">
+                        <div className="pt-3 border-t">
+                          <p className="text-xs text-gray-500 uppercase mb-2">Document</p>
                           {drawing.thumbnailUrl && drawing.fileType?.startsWith('image') ? (
                             <img 
                               src={drawing.thumbnailUrl} 
                               alt={drawing.name}
-                              className="w-20 h-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                              className="w-24 h-24 object-cover rounded border cursor-pointer hover:opacity-80"
                               onClick={() => handleViewDrawing(drawing)}
                             />
                           ) : drawing.fileType === 'application/pdf' ? (
                             <div 
-                              className="w-20 h-20 bg-red-50 border rounded flex items-center justify-center cursor-pointer hover:bg-red-100"
+                              className="w-24 h-24 bg-red-50 border rounded flex items-center justify-center cursor-pointer hover:bg-red-100"
                               onClick={() => handleViewDrawing(drawing)}
                             >
                               <File className="h-8 w-8 text-red-600" />
@@ -1346,42 +1565,21 @@ export default function ShipDetailPage() {
                             </div>
                           ) : (
                             <div 
-                              className="w-20 h-20 bg-gray-50 border rounded flex items-center justify-center cursor-pointer hover:bg-gray-100"
+                              className="w-24 h-24 bg-gray-50 border rounded flex items-center justify-center cursor-pointer hover:bg-gray-100"
                               onClick={() => handleViewDrawing(drawing)}
                             >
                               <PenTool className="h-8 w-8 text-gray-600" />
                             </div>
                           )}
+                          {drawing.fileSize && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              File size: {Math.round(drawing.fileSize / 1024)} KB
+                            </p>
+                          )}
                         </div>
                       )}
-                      <div className="flex flex-col space-y-2">
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewDrawing(drawing)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditDrawing(drawing)}
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteDrawing(drawing)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </Button>
-                        </div>
+
+                      <div className="pt-2 border-t">
                         <p className="text-xs text-gray-500">
                           Added: {new Date(drawing.createdAt).toLocaleDateString()}
                         </p>
@@ -1394,8 +1592,8 @@ export default function ShipDetailPage() {
                 <Card>
                   <CardContent className="p-8 text-center">
                     <PenTool className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <h4 className="text-lg font-semibold">No Technical Drawings</h4>
-                    <p className="text-gray-600 mb-4">Add technical drawings and blueprints with part numbers to organize ship documentation.</p>
+                    <h4 className="text-lg font-semibold">No Drawings</h4>
+                    <p className="text-gray-600 mb-4">Add drawings with part numbers and spare details to organize ship documentation.</p>
                     <Button onClick={() => setShowAddDrawingDialog(true)}>Add First Drawing</Button>
                   </CardContent>
                 </Card>
@@ -1870,200 +2068,6 @@ export default function ShipDetailPage() {
                   Cancel
                 </Button>
                 <Button type="submit">Add Certificate</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* Add Drawing Dialog */}
-        <Dialog open={showAddDrawingDialog} onOpenChange={setShowAddDrawingDialog}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add Technical Drawing</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddDrawing} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="drawing-name">Drawing Name *</Label>
-                <Input
-                  id="drawing-name"
-                  required
-                  value={newDrawing.name}
-                  onChange={(e) => setNewDrawing(prev => ({...prev, name: e.target.value}))}
-                  placeholder="e.g., Engine Assembly Diagram"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-part-number">Part Number *</Label>
-                  <Input
-                    id="drawing-part-number"
-                    required
-                    value={newDrawing.partNumber}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, partNumber: e.target.value}))}
-                    placeholder="e.g., ENG-001"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-number">Drawing Number</Label>
-                  <Input
-                    id="drawing-number"
-                    value={newDrawing.drawingNumber}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, drawingNumber: e.target.value}))}
-                    placeholder="e.g., DWG-ENG-001-A"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-category">Category</Label>
-                  <Select value={newDrawing.category} onValueChange={(value) => setNewDrawing(prev => ({...prev, category: value}))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Engine">Engine</SelectItem>
-                      <SelectItem value="Hull">Hull</SelectItem>
-                      <SelectItem value="Navigation">Navigation</SelectItem>
-                      <SelectItem value="Electrical">Electrical</SelectItem>
-                      <SelectItem value="Safety">Safety</SelectItem>
-                      <SelectItem value="Structural">Structural</SelectItem>
-                      <SelectItem value="General">General</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-type">Drawing Type</Label>
-                  <Select value={newDrawing.drawingType} onValueChange={(value) => setNewDrawing(prev => ({...prev, drawingType: value as any}))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
-                      <SelectItem value="schematic">Schematic</SelectItem>
-                      <SelectItem value="blueprint">Blueprint</SelectItem>
-                      <SelectItem value="diagram">Diagram</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="drawing-version">Version</Label>
-                <Input
-                  id="drawing-version"
-                  value={newDrawing.version}
-                  onChange={(e) => setNewDrawing(prev => ({...prev, version: e.target.value}))}
-                  placeholder="e.g., 1.0, Rev A"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="drawing-description">Description</Label>
-                <Textarea
-                  id="drawing-description"
-                  value={newDrawing.description}
-                  onChange={(e) => setNewDrawing(prev => ({...prev, description: e.target.value}))}
-                  placeholder="Describe the drawing content and purpose"
-                />
-              </div>
-
-              {/* File Upload Section */}
-              <div className="space-y-3">
-                <Label>Drawing Files</Label>
-                <p className="text-sm text-gray-600">Upload technical drawings, blueprints, or PDF documents</p>
-                
-                {/* Drag and Drop Area */}
-                <div
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
-                  onDrop={handleDrawingDrop}
-                  onDragOver={handleDrawingDragOver}
-                >
-                  <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <div className="space-y-2">
-                    <p className="text-lg font-medium text-gray-900">
-                      Drop files here or click to upload
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Images (JPG, PNG, GIF) or PDF files, max 10MB each
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => document.getElementById('drawing-file-input')?.click()}
-                      className="mt-2"
-                    >
-                      Choose Files
-                    </Button>
-                  </div>
-                  <input
-                    id="drawing-file-input"
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    onChange={handleDrawingFileUpload}
-                    className="hidden"
-                  />
-                </div>
-
-                {/* File List */}
-                {drawingFiles.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Attached Files:</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {drawingFiles.map((file, index) => (
-                        <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-md">
-                          {/* File Preview/Icon */}
-                          <div className="flex-shrink-0">
-                            {file.type.startsWith('image/') ? (
-                              <div className="w-12 h-12 rounded-md overflow-hidden bg-gray-200">
-                                {drawingPreviews[file.name] && (
-                                  <img
-                                    src={drawingPreviews[file.name]}
-                                    alt={file.name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                              </div>
-                            ) : (
-                              <div className="w-12 h-12 rounded-md bg-blue-100 flex items-center justify-center">
-                                <File className="h-6 w-6 text-blue-600" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* File Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {file.name}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {file.type} • {(file.size / 1024 / 1024).toFixed(1)} MB
-                            </p>
-                          </div>
-                          
-                          {/* Remove Button */}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeDrawingFile(index)}
-                            className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
-                          >
-                            <X className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setShowAddDrawingDialog(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isDrawingUploading}>
-                  {isDrawingUploading ? "Uploading..." : "Add Drawing"}
-                </Button>
               </div>
             </form>
           </DialogContent>
@@ -2763,21 +2767,19 @@ export default function ShipDetailPage() {
                     <p className="text-lg font-semibold text-blue-600">{selectedDrawing.partNumber}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-600">Drawing Number</Label>
-                    <p>{selectedDrawing.drawingNumber}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Version</Label>
-                    <p>{selectedDrawing.version}</p>
+                    <Label className="text-sm font-medium text-gray-600">Quantity</Label>
+                    <p>{selectedDrawing.quantity} Nos</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Category</Label>
                     <p>{selectedDrawing.category}</p>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Type</Label>
-                    <p>{selectedDrawing.drawingType}</p>
-                  </div>
+                  {selectedDrawing.category === "Engine drawing" && selectedDrawing.engineType && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Engine Type</Label>
+                      <p>{selectedDrawing.engineType}</p>
+                    </div>
+                  )}
                   {selectedDrawing.fileType && (
                     <div>
                       <Label className="text-sm font-medium text-gray-600">File Type</Label>
@@ -2888,62 +2890,39 @@ export default function ShipDetailPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-drawing-number">Drawing Number</Label>
+                  <Label htmlFor="edit-quantity">Quantity</Label>
                   <Input
-                    id="edit-drawing-number"
-                    value={editingDrawing.drawingNumber}
-                    onChange={(e) => setEditingDrawing(prev => ({...prev, drawingNumber: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-version">Version</Label>
-                  <Input
-                    id="edit-version"
-                    value={editingDrawing.version}
-                    onChange={(e) => setEditingDrawing(prev => ({...prev, version: e.target.value}))}
+                    id="edit-quantity"
+                    type="number"
+                    min="1"
+                    value={editingDrawing.quantity}
+                    onChange={(e) => setEditingDrawing(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-category">Category</Label>
-                  <Select value={editingDrawing.category} onValueChange={(value) => setEditingDrawing(prev => ({...prev, category: value}))}>
+                  <Select value={editingDrawing.category} onValueChange={(value) => setEditingDrawing(prev => ({...prev, category: value as any}))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Engine">Engine</SelectItem>
-                      <SelectItem value="Hull">Hull</SelectItem>
-                      <SelectItem value="Navigation">Navigation</SelectItem>
-                      <SelectItem value="Electrical">Electrical</SelectItem>
-                      <SelectItem value="Safety">Safety</SelectItem>
-                      <SelectItem value="Structural">Structural</SelectItem>
+                      <SelectItem value="Equipment drawing">Equipment drawing</SelectItem>
+                      <SelectItem value="Engine drawing">Engine drawing</SelectItem>
                       <SelectItem value="General">General</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-drawing-type">Drawing Type</Label>
-                  <Select value={editingDrawing.drawingType} onValueChange={(value) => setEditingDrawing(prev => ({...prev, drawingType: value as any}))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
-                      <SelectItem value="schematic">Schematic</SelectItem>
-                      <SelectItem value="blueprint">Blueprint</SelectItem>
-                      <SelectItem value="diagram">Diagram</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-version">Version</Label>
-                <Input
-                  id="edit-version"
-                  value={editingDrawing.version}
-                  onChange={(e) => setEditingDrawing(prev => ({...prev, version: e.target.value}))}
-                  placeholder="e.g., 1.0, Rev A"
-                />
+                {editingDrawing.category === "Engine drawing" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-engine-type">Engine Type</Label>
+                    <Input
+                      id="edit-engine-type"
+                      value={editingDrawing.engineType}
+                      onChange={(e) => setEditingDrawing(prev => ({...prev, engineType: e.target.value}))}
+                      placeholder="e.g., Turbocharger 9GA6"
+                    />
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-description">Description</Label>
@@ -3041,7 +3020,7 @@ export default function ShipDetailPage() {
                 <div className="bg-gray-50 p-3 rounded">
                   <h4 className="font-semibold">{selectedDrawing.name}</h4>
                   <p className="text-sm text-gray-600">Part Number: {selectedDrawing.partNumber}</p>
-                  <p className="text-sm text-gray-600">Drawing No: {selectedDrawing.drawingNumber}</p>
+                  <p className="text-sm text-gray-600">Category: {selectedDrawing.category}</p>
                 </div>
                 <div className="flex justify-end space-x-2 pt-4 border-t">
                   <Button
@@ -3062,152 +3041,740 @@ export default function ShipDetailPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Add Drawing Dialog */}
-        <Dialog open={showAddDrawingDialog} onOpenChange={setShowAddDrawingDialog}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        {/* Add Drawing Dialog - Multi-Step */}
+        <Dialog open={showAddDrawingDialog} onOpenChange={(open) => {
+          if (!open) {
+            setDrawingStep(1)
+            setCreatedDrawingId(null)
+            setNewDrawing({
+              name: "",
+              description: "",
+              partNumber: "",
+              quantity: 1,
+              category: "General",
+              engineType: "",
+              spares: []
+            })
+            setNewSpare({
+              spareName: "",
+              make: "",
+              partNumber: "",
+              description: "",
+              quantity: 1,
+              unit: "pcs"
+            })
+            setDrawingFiles([])
+            setDrawingPreviews({})
+          }
+          setShowAddDrawingDialog(open)
+        }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Technical Drawing</DialogTitle>
+              <DialogTitle>
+                Add Drawing - Step {drawingStep} of 3
+                {drawingStep === 1 && ": Basic Information"}
+                {drawingStep === 2 && ": Spare Parts"}
+                {drawingStep === 3 && ": File Upload"}
+              </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddDrawing} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-name">Name *</Label>
-                  <Input
-                    id="drawing-name"
-                    required
-                    value={newDrawing.name}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, name: e.target.value}))}
-                    placeholder="Drawing name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="part-number">Part Number *</Label>
-                  <Input
-                    id="part-number"
-                    required
-                    value={newDrawing.partNumber}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, partNumber: e.target.value}))}
-                    placeholder="Part number"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-number">Drawing Number</Label>
-                  <Input
-                    id="drawing-number"
-                    value={newDrawing.drawingNumber}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, drawingNumber: e.target.value}))}
-                    placeholder="Auto-filled if empty"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="version">Version</Label>
-                  <Input
-                    id="version"
-                    value={newDrawing.version}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, version: e.target.value}))}
-                    placeholder="1.0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Input
-                    id="category"
-                    value={newDrawing.category}
-                    onChange={(e) => setNewDrawing(prev => ({...prev, category: e.target.value}))}
-                    placeholder="General"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="drawing-type">Drawing Type</Label>
-                  <Select value={newDrawing.drawingType} onValueChange={(value) => setNewDrawing(prev => ({...prev, drawingType: value as any}))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
-                      <SelectItem value="schematic">Schematic</SelectItem>
-                      <SelectItem value="blueprint">Blueprint</SelectItem>
-                      <SelectItem value="diagram">Diagram</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  rows={3}
-                  value={newDrawing.description}
-                  onChange={(e) => setNewDrawing(prev => ({...prev, description: e.target.value}))}
-                  placeholder="Drawing description..."
-                />
-              </div>
 
-              {/* File Upload Section */}
-              <div className="space-y-2">
-                <Label>Upload Drawing Files</Label>
-                <div
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
-                  onDrop={handleDrawingDrop}
-                  onDragOver={handleDrawingDragOver}
-                  onClick={() => document.getElementById('drawing-file-input')?.click()}
-                >
-                  <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600">
-                    Click to upload or drag and drop
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Images and PDF files up to 10MB
-                  </p>
+            {/* Progress Indicator */}
+            <div className="flex items-center space-x-2 mb-6">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    step < drawingStep ? 'bg-green-500 text-white' : 
+                    step === drawingStep ? 'bg-blue-500 text-white' : 
+                    'bg-gray-200 text-gray-600'
+                  }`}>
+                    {step < drawingStep ? '✓' : step}
+                  </div>
+                  {step < 3 && (
+                    <div className={`w-12 h-1 mx-2 ${
+                      step < drawingStep ? 'bg-green-500' : 'bg-gray-200'
+                    }`} />
+                  )}
                 </div>
-                <input
-                  id="drawing-file-input"
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf"
-                  onChange={handleDrawingFileUpload}
-                  className="hidden"
-                />
-              </div>
+              ))}
+            </div>
 
-              {/* Uploaded Files Display */}
-              {drawingFiles.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Uploaded Files ({drawingFiles.length})</Label>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {drawingFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex items-center space-x-2">
-                          {file.type.startsWith('image/') ? (
-                            <ImageIcon className="h-4 w-4 text-blue-500" />
-                          ) : (
-                            <File className="h-4 w-4 text-red-500" />
-                          )}
-                          <span className="text-sm">{file.name}</span>
-                          <span className="text-xs text-gray-500">
-                            ({Math.round(file.size / 1024)} KB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeDrawingFile(index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+            <form onSubmit={handleAddDrawing} className="space-y-6">
+              {/* Step 1: Basic Drawing Information */}
+              {drawingStep === 1 && (
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-900 border-b pb-2">Basic Drawing Information</h4>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="drawing-name">Drawing Name *</Label>
+                      <Input
+                        id="drawing-name"
+                        required
+                        value={newDrawing.name}
+                        onChange={(e) => setNewDrawing(prev => ({...prev, name: e.target.value}))}
+                        placeholder="e.g., Engine Assembly Drawing"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="part-number">Part Number *</Label>
+                      <Input
+                        id="part-number"
+                        required
+                        value={newDrawing.partNumber}
+                        onChange={(e) => setNewDrawing(prev => ({...prev, partNumber: e.target.value}))}
+                        placeholder="e.g., 0SF"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">Quantity *</Label>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        required
+                        min="1"
+                        value={newDrawing.quantity}
+                        onChange={(e) => setNewDrawing(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Category *</Label>
+                      <Select value={newDrawing.category} onValueChange={(value) => setNewDrawing(prev => ({...prev, category: value as any}))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Equipment drawing">Equipment drawing</SelectItem>
+                          <SelectItem value="Engine drawing">Engine drawing</SelectItem>
+                          <SelectItem value="General">General</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Engine Type field (only for Engine drawings) */}
+                  {newDrawing.category === "Engine drawing" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="engine-type">Engine Type</Label>
+                      <Input
+                        id="engine-type"
+                        value={newDrawing.engineType}
+                        onChange={(e) => setNewDrawing(prev => ({...prev, engineType: e.target.value}))}
+                        placeholder="e.g., Turbocharger 9GA6"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description *</Label>
+                    <Textarea
+                      id="description"
+                      required
+                      rows={3}
+                      value={newDrawing.description}
+                      onChange={(e) => setNewDrawing(prev => ({...prev, description: e.target.value}))}
+                      placeholder="Describe the drawing content and purpose"
+                    />
                   </div>
                 </div>
               )}
+
+              {/* Step 2: Spare Parts */}
+              {drawingStep === 2 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-semibold text-gray-900 border-b pb-2">Spare Parts with Drawing</h4>
+                  </div>
+
+                  {/* Add New Spare Form */}
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h5 className="font-medium text-blue-900 mb-3">Add New Spare Part</h5>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Spare Name *</Label>
+                        <Input
+                          value={newSpare.spareName}
+                          onChange={(e) => setNewSpare(prev => ({...prev, spareName: e.target.value}))}
+                          placeholder="e.g., Bolt"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Make *</Label>
+                        <Input
+                          value={newSpare.make}
+                          onChange={(e) => setNewSpare(prev => ({...prev, make: e.target.value}))}
+                          placeholder="e.g., Bosch"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Part Number *</Label>
+                        <Input
+                          value={newSpare.partNumber}
+                          onChange={(e) => setNewSpare(prev => ({...prev, partNumber: e.target.value}))}
+                          placeholder="e.g., 0SF123"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Description</Label>
+                        <Input
+                          value={newSpare.description}
+                          onChange={(e) => setNewSpare(prev => ({...prev, description: e.target.value}))}
+                          placeholder="Optional description"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Quantity</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={newSpare.quantity}
+                          onChange={(e) => setNewSpare(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Unit</Label>
+                        <Select value={newSpare.unit} onValueChange={(value) => setNewSpare(prev => ({...prev, unit: value}))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pcs">pcs</SelectItem>
+                            <SelectItem value="Nos">Nos</SelectItem>
+                            <SelectItem value="kg">kg</SelectItem>
+                            <SelectItem value="m">m</SelectItem>
+                            <SelectItem value="l">l</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleAddSpare}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Spare Part
+                    </Button>
+                  </div>
+
+                  {/* Existing Spares Table */}
+                  {newDrawing.spares.length === 0 ? (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center">
+                      <Package className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-600">No spare parts added yet</p>
+                      <p className="text-sm text-gray-500">Add spare parts related to this drawing above</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Label className="font-medium">Added Spare Parts</Label>
+                      <div className="border rounded-lg overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Spare Name</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Make</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part Number</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {newDrawing.spares.map((spare, index) => (
+                              <tr key={index}>
+                                <td className="px-3 py-2 text-sm">{spare.spareName}</td>
+                                <td className="px-3 py-2 text-sm">{spare.make}</td>
+                                <td className="px-3 py-2 text-sm text-blue-600">{spare.partNumber}</td>
+                                <td className="px-3 py-2 text-sm">{spare.description || '-'}</td>
+                                <td className="px-3 py-2 text-sm">{spare.quantity}</td>
+                                <td className="px-3 py-2 text-sm">{spare.unit}</td>
+                                <td className="px-3 py-2 text-sm">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveSpare(index)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: File Upload */}
+              {drawingStep === 3 && (
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-900 border-b pb-2">Upload Drawing Files</h4>
+                  
+                  {/* File Upload Input */}
+                  <div 
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
+                    onDrop={handleDrawingDrop}
+                    onDragOver={handleDrawingDragOver}
+                  >
+                    <input
+                      type="file"
+                      id="drawing-files"
+                      multiple
+                      accept="image/*,.pdf,.dwg,.dxf"
+                      onChange={handleDrawingFileUpload}
+                      className="hidden"
+                    />
+                    <label htmlFor="drawing-files" className="cursor-pointer">
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-1">
+                        Click to upload or drag and drop
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Images, PDFs, DWG, DXF files (Max 10MB each)
+                      </p>
+                    </label>
+                  </div>
+
+                  {/* Uploaded Files List */}
+                  {drawingFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Uploaded Files</Label>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {drawingFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                            <div className="flex items-center space-x-2">
+                              {file.type.startsWith('image/') ? (
+                                <ImageIcon className="h-4 w-4 text-blue-500" />
+                              ) : (
+                                <File className="h-4 w-4 text-gray-500" />
+                              )}
+                              <span className="text-sm truncate">{file.name}</span>
+                              <span className="text-xs text-gray-500">
+                                ({Math.round(file.size / 1024)} KB)
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeDrawingFile(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <h5 className="font-medium text-green-900 mb-2">Drawing Summary</h5>
+                    <div className="text-sm text-green-800 space-y-1">
+                      <p><strong>Name:</strong> {newDrawing.name}</p>
+                      <p><strong>Part Number:</strong> {newDrawing.partNumber}</p>
+                      <p><strong>Category:</strong> {newDrawing.category}</p>
+                      <p><strong>Spare Parts:</strong> {newDrawing.spares.length} added</p>
+                      <p><strong>Files:</strong> {drawingFiles.length} uploaded</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between pt-4 border-t">
+                <div>
+                  {drawingStep > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleGoToPrevStep}
+                    >
+                      Previous
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="flex space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAddDrawingDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={isDrawingUploading}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isDrawingUploading ? "Processing..." : 
+                     drawingStep === 1 ? "Create Drawing" : 
+                     drawingStep === 2 ? "Continue to Upload" : 
+                     "Complete"}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Drawing Dialog */}
+        <Dialog open={showViewDrawingDialog} onOpenChange={setShowViewDrawingDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Drawing Details</DialogTitle>
+            </DialogHeader>
+            {selectedDrawing && (
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 mb-3">Basic Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Drawing Name</Label>
+                      <p className="text-lg font-semibold">{selectedDrawing.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Part Number</Label>
+                      <p className="text-lg font-semibold text-blue-600">{selectedDrawing.partNumber}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Category</Label>
+                      <Badge variant="outline" className="w-fit">
+                        {selectedDrawing.category}
+                      </Badge>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Quantity</Label>
+                      <p className="font-medium">{selectedDrawing.quantity} Nos</p>
+                    </div>
+                    {selectedDrawing.category === "Engine drawing" && selectedDrawing.engineType && (
+                      <div className="col-span-2">
+                        <Label className="text-sm font-medium text-gray-600">Engine Type</Label>
+                        <p className="font-medium text-green-600">{selectedDrawing.engineType}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-4">
+                    <Label className="text-sm font-medium text-gray-600">Description</Label>
+                    <p className="mt-1 text-gray-700">{selectedDrawing.description || "No description provided"}</p>
+                  </div>
+                </div>
+
+                {/* Spare Parts */}
+                {selectedDrawing.spares && selectedDrawing.spares.length > 0 && (
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-green-900 mb-3">Spare Parts ({selectedDrawing.spares.length})</h4>
+                    <div className="space-y-3">
+                      {selectedDrawing.spares.map((spare, index) => (
+                        <div key={spare.id || index} className="bg-white rounded-lg p-3 border">
+                          <div className="grid grid-cols-5 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-500 uppercase">Spare Name</Label>
+                              <p className="text-sm font-medium">{spare.spareName}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-500 uppercase">Make</Label>
+                              <p className="text-sm font-medium text-green-600">{spare.make || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-500 uppercase">Part Number</Label>
+                              <p className="text-sm font-medium text-blue-600">{spare.partNumber}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-500 uppercase">Quantity</Label>
+                              <p className="text-sm font-medium">{spare.quantity} {spare.unit}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-500 uppercase">Description</Label>
+                              <p className="text-sm text-gray-600">{spare.description || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Information */}
+                {(selectedDrawing.documentUrl || selectedDrawing.fileType) && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">Document Information</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs text-gray-500 uppercase">File Type</Label>
+                        <p className="text-sm font-medium">{selectedDrawing.fileType || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-gray-500 uppercase">File Size</Label>
+                        <p className="text-sm font-medium">
+                          {selectedDrawing.fileSize ? `${Math.round(selectedDrawing.fileSize / 1024)} KB` : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-gray-500 uppercase">Created</Label>
+                        <p className="text-sm font-medium">
+                          {selectedDrawing.createdAt ? new Date(selectedDrawing.createdAt).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowViewDrawingDialog(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Drawing Dialog */}
+        <Dialog open={showEditDrawingDialog} onOpenChange={setShowEditDrawingDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Drawing</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleUpdateDrawing} className="space-y-6">
+              {/* Basic Information */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-4">Basic Information</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-drawing-name">Drawing Name *</Label>
+                    <Input
+                      id="edit-drawing-name"
+                      required
+                      value={editingDrawing.name}
+                      onChange={(e) => setEditingDrawing(prev => ({...prev, name: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-part-number">Part Number *</Label>
+                    <Input
+                      id="edit-part-number"
+                      required
+                      value={editingDrawing.partNumber}
+                      onChange={(e) => setEditingDrawing(prev => ({...prev, partNumber: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-category">Category</Label>
+                    <Select value={editingDrawing.category} onValueChange={(value: "Equipment drawing" | "Engine drawing" | "General") => setEditingDrawing(prev => ({...prev, category: value}))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="General">General</SelectItem>
+                        <SelectItem value="Equipment drawing">Equipment Drawing</SelectItem>
+                        <SelectItem value="Engine drawing">Engine Drawing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-quantity">Quantity</Label>
+                    <Input
+                      id="edit-quantity"
+                      type="number"
+                      min="1"
+                      value={editingDrawing.quantity}
+                      onChange={(e) => setEditingDrawing(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
+                    />
+                  </div>
+                  {editingDrawing.category === "Engine drawing" && (
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="edit-engine-type">Engine Type</Label>
+                      <Input
+                        id="edit-engine-type"
+                        value={editingDrawing.engineType}
+                        onChange={(e) => setEditingDrawing(prev => ({...prev, engineType: e.target.value}))}
+                        placeholder="e.g., Marine Diesel Engine"
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 mt-4">
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Textarea
+                    id="edit-description"
+                    rows={3}
+                    value={editingDrawing.description}
+                    onChange={(e) => setEditingDrawing(prev => ({...prev, description: e.target.value}))}
+                    placeholder="Describe the drawing and its purpose..."
+                  />
+                </div>
+              </div>
+
+              {/* Spare Parts Management */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <h4 className="font-semibold text-green-900 mb-4">Spare Parts with Drawing</h4>
+                
+                {/* Add New Spare Part Form */}
+                <div className="bg-white rounded-lg p-4 border mb-4">
+                  <h5 className="font-medium mb-3">Add Spare Part</h5>
+                  <div className="grid grid-cols-6 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Spare Name *</Label>
+                      <Input
+                        placeholder="Spare name"
+                        value={newSpare.spareName}
+                        onChange={(e) => setNewSpare(prev => ({...prev, spareName: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Make *</Label>
+                      <Input
+                        placeholder="Manufacturer"
+                        value={newSpare.make}
+                        onChange={(e) => setNewSpare(prev => ({...prev, make: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Part Number *</Label>
+                      <Input
+                        placeholder="Part number"
+                        value={newSpare.partNumber}
+                        onChange={(e) => setNewSpare(prev => ({...prev, partNumber: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Description</Label>
+                      <Input
+                        placeholder="Description"
+                        value={newSpare.description}
+                        onChange={(e) => setNewSpare(prev => ({...prev, description: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Quantity</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newSpare.quantity}
+                        onChange={(e) => setNewSpare(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Unit</Label>
+                      <Select value={newSpare.unit} onValueChange={(value) => setNewSpare(prev => ({...prev, unit: value}))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pcs">Pieces</SelectItem>
+                          <SelectItem value="kg">Kilograms</SelectItem>
+                          <SelectItem value="ltr">Liters</SelectItem>
+                          <SelectItem value="mtr">Meters</SelectItem>
+                          <SelectItem value="set">Set</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!newSpare.spareName || !newSpare.make || !newSpare.partNumber) {
+                        toast.error("Please fill in spare name, make, and part number")
+                        return
+                      }
+                      const spare = {
+                        ...newSpare,
+                        id: `spare-${Date.now()}`
+                      }
+                      setEditingDrawing(prev => ({
+                        ...prev,
+                        spares: [...prev.spares, spare]
+                      }))
+                      setNewSpare({
+                        spareName: "",
+                        make: "",
+                        partNumber: "",
+                        description: "",
+                        quantity: 1,
+                        unit: "pcs"
+                      })
+                      toast.success("Spare part added to list")
+                    }}
+                    className="mt-3"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Spare Part
+                  </Button>
+                </div>
+
+                {/* Current Spare Parts List */}
+                {editingDrawing.spares.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Current Spare Parts ({editingDrawing.spares.length})</Label>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {editingDrawing.spares.map((spare, index) => (
+                        <div key={spare.id || index} className="flex items-center justify-between bg-white p-3 rounded border">
+                          <div className="grid grid-cols-5 gap-3 flex-1">
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Spare Name</p>
+                              <p className="text-sm font-medium">{spare.spareName}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Make</p>
+                              <p className="text-sm font-medium text-green-600">{spare.make || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Part Number</p>
+                              <p className="text-sm font-medium text-blue-600">{spare.partNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Quantity</p>
+                              <p className="text-sm">{spare.quantity} {spare.unit}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Description</p>
+                              <p className="text-sm text-gray-600">{spare.description || 'N/A'}</p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingDrawing(prev => ({
+                                ...prev,
+                                spares: prev.spares.filter((_, i) => i !== index)
+                              }))
+                              toast.success("Spare part removed")
+                            }}
+                            className="ml-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex justify-end space-x-2 pt-4 border-t">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowAddDrawingDialog(false)}
+                  onClick={() => setShowEditDrawingDialog(false)}
                 >
                   Cancel
                 </Button>
@@ -3216,13 +3783,57 @@ export default function ShipDetailPage() {
                   disabled={isDrawingUploading}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {isDrawingUploading ? "Adding..." : "Add Drawing"}
+                  {isDrawingUploading ? "Updating..." : "Update Drawing"}
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Drawing Dialog */}
+        <Dialog open={showDeleteDrawingDialog} onOpenChange={setShowDeleteDrawingDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete Drawing</DialogTitle>
+            </DialogHeader>
+            {selectedDrawing && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3 p-4 bg-red-50 rounded-lg">
+                  <AlertTriangle className="h-8 w-8 text-red-600" />
+                  <div>
+                    <p className="font-medium text-red-900">
+                      Are you sure you want to delete this drawing?
+                    </p>
+                    <p className="text-sm text-red-700 mt-1">
+                      This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <h4 className="font-semibold">{selectedDrawing.name}</h4>
+                  <p className="text-sm text-gray-600">Part Number: {selectedDrawing.partNumber}</p>
+                  <p className="text-sm text-gray-600">Category: {selectedDrawing.category}</p>
+                </div>
+                <div className="flex justify-end space-x-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDeleteDrawingDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={confirmDeleteDrawing}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Delete Drawing
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
     </DashboardLayout>
   )
 }
+

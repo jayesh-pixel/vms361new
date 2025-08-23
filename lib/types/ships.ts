@@ -69,12 +69,12 @@ export interface Certificate {
 export interface Drawing {
   id: string;
   name: string;
+  description: string;
   partNumber: string;
-  description?: string;
-  category: string;
-  version: string;
-  drawingNumber: string;
-  drawingType: 'technical' | 'schematic' | 'blueprint' | 'diagram' | 'manual';
+  quantity: number;
+  category: 'Equipment drawing' | 'Engine drawing' | 'General';
+  engineType?: string; // e.g., "Turbocharger 9GA6"
+  spares: DrawingSpare[];
   documentUrl?: string;
   thumbnailUrl?: string;
   fileSize?: number;
@@ -82,6 +82,16 @@ export interface Drawing {
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DrawingSpare {
+  id: string;
+  spareName: string;
+  make: string;
+  partNumber: string;
+  description: string;
+  quantity: number;
+  unit: string;
 }
 
 export interface InventoryItem {
