@@ -465,15 +465,51 @@ export class ShipService {
       const shipRef = doc(db, this.COLLECTION, shipId);
       const reqRef = doc(collection(shipRef, this.REQUISITIONS_SUBCOLLECTION));
       
-      const newReq = {
-        ...reqData,
-        id: reqRef.id,
+      // Build the new requisition object, only including defined values
+      const newReq: any = {
+        // Required fields
+        type: reqData.type,
+        requestedBy: reqData.requestedBy,
         requestDate: reqData.requestDate,
         requiredDate: reqData.requiredDate,
-        approvalDate: reqData.approvalDate,
+        status: reqData.status,
+        priority: reqData.priority,
+        items: reqData.items,
+        
+        // System fields
+        id: reqRef.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      // Only include optional fields if they have defined values
+      if (reqData.approvalDate !== undefined && reqData.approvalDate !== null) {
+        newReq.approvalDate = reqData.approvalDate;
+      }
+
+      if (reqData.approvedBy !== undefined && reqData.approvedBy !== null) {
+        newReq.approvedBy = reqData.approvedBy;
+      }
+
+      if (reqData.rejectionReason !== undefined && reqData.rejectionReason !== null) {
+        newReq.rejectionReason = reqData.rejectionReason;
+      }
+
+      if (reqData.totalCost !== undefined && reqData.totalCost !== null) {
+        newReq.totalCost = reqData.totalCost;
+      }
+
+      if (reqData.supplier !== undefined && reqData.supplier !== null) {
+        newReq.supplier = reqData.supplier;
+      }
+
+      if (reqData.orderNumber !== undefined && reqData.orderNumber !== null) {
+        newReq.orderNumber = reqData.orderNumber;
+      }
+
+      if (reqData.notes !== undefined && reqData.notes !== null) {
+        newReq.notes = reqData.notes;
+      }
 
       await addDoc(collection(shipRef, this.REQUISITIONS_SUBCOLLECTION), newReq);
       return reqRef.id;

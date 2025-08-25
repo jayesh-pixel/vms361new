@@ -43,6 +43,7 @@ import { toast } from "sonner"
 import type { Ship as ShipType, CrewMember, Certificate, Drawing, InventoryItem, Requisition, Task } from "@/lib/types/ships"
 import type { Job, CreateJobRequest } from "@/lib/types/jobs"
 import { JobService } from "@/lib/services/job-service"
+import { storageService } from "@/lib/storage-service"
 
 export default function ShipDetailPage() {
   const router = useRouter()
@@ -137,8 +138,15 @@ export default function ShipDetailPage() {
     type: "material" as "material" | "service",
     priority: "medium" as "low" | "medium" | "high",
     requiredDate: "",
-    estimatedCost: ""
+    estimatedCost: "",
+    attachments: [] as File[]
   })
+
+  // Requisition image upload states
+  const [requisitionImages, setRequisitionImages] = useState<File[]>([])
+  const [requisitionPreviews, setRequisitionPreviews] = useState<{[key: string]: string}>({})
+  const [requisitionUploadProgress, setRequisitionUploadProgress] = useState<{[key: string]: number}>({})
+  const [isRequisitionUploading, setIsRequisitionUploading] = useState(false)
 
   const [newTask, setNewTask] = useState({
     title: "",
@@ -568,6 +576,87 @@ export default function ShipDetailPage() {
     return <File className="h-4 w-4" />
   }
 
+  // Requisition image upload handlers
+  const handleRequisitionImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    processRequisitionImages(files)
+    // Clear the input
+    e.target.value = ''
+  }
+
+  const processRequisitionImages = (files: File[]) => {
+    if (files.length === 0) return
+
+    // Validate file types (images only for requisitions)
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    const invalidFiles = files.filter(file => !validTypes.includes(file.type))
+    
+    if (invalidFiles.length > 0) {
+      toast.error("Only image files (JPEG, PNG, GIF, WebP) are allowed")
+      return
+    }
+
+    // Validate file sizes (max 5MB per file for images)
+    const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024)
+    if (oversizedFiles.length > 0) {
+      toast.error("Images must be smaller than 5MB")
+      return
+    }
+
+    // Add files to requisition images
+    setRequisitionImages(prev => [...prev, ...files])
+
+    // Generate previews for image files
+    files.forEach(file => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setRequisitionPreviews(prev => ({
+          ...prev,
+          [file.name]: e.target?.result as string
+        }))
+      }
+      reader.readAsDataURL(file)
+    })
+
+    // Update newRequisition attachments
+    setNewRequisition(prev => ({
+      ...prev,
+      attachments: [...prev.attachments, ...files]
+    }))
+  }
+
+  const handleRequisitionImageDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files)
+    processRequisitionImages(files)
+  }
+
+  const handleRequisitionImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const removeRequisitionImage = (index: number) => {
+    const fileToRemove = requisitionImages[index]
+    
+    // Remove from images array
+    setRequisitionImages(prev => prev.filter((_, i) => i !== index))
+    
+    // Remove from previews
+    if (fileToRemove && requisitionPreviews[fileToRemove.name]) {
+      setRequisitionPreviews(prev => {
+        const newPreviews = { ...prev }
+        delete newPreviews[fileToRemove.name]
+        return newPreviews
+      })
+    }
+
+    // Remove from newRequisition attachments
+    setNewRequisition(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index)
+    }))
+  }
+
   const handleAddCertificate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCertificate.name || !newCertificate.expiryDate) {
@@ -987,9 +1076,24 @@ export default function ShipDetailPage() {
     }
 
     try {
+      setIsRequisitionUploading(true)
+      
+      // Upload images to Firebase Storage if any
+      let attachmentUrls: string[] = []
+      if (newRequisition.attachments.length > 0) {
+        const basePath = `ships/${shipId}/requisitions/attachments`
+        attachmentUrls = await storageService.uploadFiles(newRequisition.attachments, basePath)
+      }
+      
+      // Prepare notes with attachment URLs if any
+      let notesWithAttachments = newRequisition.description || ""
+      if (attachmentUrls.length > 0) {
+        notesWithAttachments += `${notesWithAttachments ? '\n\n' : ''}Attachments:\n${attachmentUrls.join('\n')}`
+      }
+      
       const reqData = {
         type: newRequisition.type,
-        requestedBy: "current-user", // This should be actual user ID
+        requestedBy: user?.uid || "current-user",
         requestDate: new Date(),
         requiredDate: new Date(newRequisition.requiredDate),
         status: "pending" as const,
@@ -1002,24 +1106,37 @@ export default function ShipDetailPage() {
           unit: "pcs",
           estimatedPrice: parseFloat(newRequisition.estimatedCost) || 0
         }],
-        notes: newRequisition.description,
+        notes: notesWithAttachments,
         totalCost: parseFloat(newRequisition.estimatedCost) || 0
+        // Note: attachmentUrls are included in notes field for now since Requisition interface doesn't have attachments field
       }
 
       await createRequisition(shipId, reqData)
       toast.success("Requisition created successfully")
       setShowAddRequisitionDialog(false)
+      
+      // Reset all form state including images
       setNewRequisition({
         title: "",
         description: "",
         type: "material",
         priority: "medium",
         requiredDate: "",
-        estimatedCost: ""
+        estimatedCost: "",
+        attachments: []
       })
+      
+      // Reset image-related state
+      setRequisitionImages([])
+      setRequisitionPreviews({})
+      setRequisitionUploadProgress({})
+      
       loadShipData(shipId)
     } catch (error: any) {
+      console.error("Failed to create requisition:", error)
       toast.error("Failed to create requisition: " + error.message)
+    } finally {
+      setIsRequisitionUploading(false)
     }
   }
 
@@ -1673,7 +1790,42 @@ export default function ShipDetailPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-semibold">{req.items[0]?.name || "Requisition Item"}</h4>
-                        <p className="text-sm text-gray-600">{req.notes || "No description"}</p>
+                        <div className="text-sm text-gray-600">
+                          {req.notes ? (
+                            <div className="space-y-2">
+                              {req.notes.split('\n').map((line, index) => {
+                                // Check if line is an image URL
+                                if (line.trim().match(/^https:\/\/.*\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i)) {
+                                  return (
+                                    <div key={index} className="mt-2">
+                                      <img 
+                                        src={line.trim()} 
+                                        alt="Requisition attachment"
+                                        className="max-w-xs max-h-32 object-cover rounded border cursor-pointer hover:opacity-80"
+                                        onClick={() => window.open(line.trim(), '_blank')}
+                                      />
+                                    </div>
+                                  )
+                                }
+                                // Skip the "Attachments:" header line
+                                if (line.trim() === 'Attachments:') {
+                                  return (
+                                    <p key={index} className="font-medium text-gray-700 mt-2">
+                                      Attachments:
+                                    </p>
+                                  )
+                                }
+                                // Regular text lines
+                                if (line.trim()) {
+                                  return <p key={index}>{line}</p>
+                                }
+                                return null
+                              })}
+                            </div>
+                          ) : (
+                            "No description"
+                          )}
+                        </div>
                         <div className="flex items-center space-x-2 mt-2">
                           <Badge className={getPriorityColor(req.priority)}>
                             {req.priority}
@@ -2154,8 +2306,25 @@ export default function ShipDetailPage() {
         </Dialog>
 
         {/* Add Requisition Dialog */}
-        <Dialog open={showAddRequisitionDialog} onOpenChange={setShowAddRequisitionDialog}>
-          <DialogContent className="max-w-md">
+        <Dialog open={showAddRequisitionDialog} onOpenChange={(open) => {
+          if (!open) {
+            // Reset form and image state when dialog closes
+            setNewRequisition({
+              title: "",
+              description: "",
+              type: "material",
+              priority: "medium",
+              requiredDate: "",
+              estimatedCost: "",
+              attachments: []
+            })
+            setRequisitionImages([])
+            setRequisitionPreviews({})
+            setRequisitionUploadProgress({})
+          }
+          setShowAddRequisitionDialog(open)
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Requisition</DialogTitle>
             </DialogHeader>
@@ -2214,12 +2383,83 @@ export default function ShipDetailPage() {
                   onChange={(e) => setNewRequisition(prev => ({...prev, requiredDate: e.target.value}))}
                 />
               </div>
-          
+              <div className="space-y-2">
+                <Label htmlFor="req-cost">Estimated Cost</Label>
+                <Input
+                  id="req-cost"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newRequisition.estimatedCost}
+                  onChange={(e) => setNewRequisition(prev => ({...prev, estimatedCost: e.target.value}))}
+                />
+              </div>
+
+              {/* Image Upload Section */}
+              <div className="space-y-3">
+                <Label>Attach Images (Optional)</Label>
+                <div
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-gray-400 transition-colors"
+                  onDrop={handleRequisitionImageDrop}
+                  onDragOver={handleRequisitionImageDragOver}
+                  onClick={() => document.getElementById('req-image-upload')?.click()}
+                >
+                  <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    Click to upload or drag and drop images
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    PNG, JPG, GIF, WebP up to 5MB each
+                  </p>
+                  <input
+                    id="req-image-upload"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleRequisitionImageUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Image Previews */}
+                {requisitionImages.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {requisitionImages.map((file, index) => (
+                      <div key={index} className="relative">
+                        <div className="aspect-square rounded-lg overflow-hidden border">
+                          {requisitionPreviews[file.name] ? (
+                            <img
+                              src={requisitionPreviews[file.name]}
+                              alt={file.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                              <ImageIcon className="h-8 w-8 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRequisitionImage(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <p className="text-xs text-gray-600 mt-1 truncate">{file.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setShowAddRequisitionDialog(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">Create Requisition</Button>
+                <Button type="submit" disabled={isRequisitionUploading}>
+                  {isRequisitionUploading ? "Creating..." : "Create Requisition"}
+                </Button>
               </div>
             </form>
           </DialogContent>
