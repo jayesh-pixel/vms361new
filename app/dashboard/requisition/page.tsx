@@ -49,8 +49,8 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { format } from "date-fns"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 // Form schemas
 const requisitionSchema = z.object({
@@ -934,6 +934,34 @@ export default function RequisitionPage() {
                               <FormControl>
                                 <Input placeholder="Enter machinery/equipment details" {...field} />
                               </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Priority Section */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Priority Level</h3>
+                        <FormField
+                          control={requisitionForm.control}
+                          name="priority"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Priority</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select priority" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="medium">Medium</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="urgent">Urgent</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}
