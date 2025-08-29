@@ -19,7 +19,8 @@ import {
   Bell,
   Search,
   User,
-  LogOut
+  LogOut,
+  Briefcase
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -54,6 +55,12 @@ const navigationItems = [
     icon: Users,
     href: "/dashboard/crew",
     description: "Personnel management"
+  },
+  {
+    title: "Jobs",
+    icon: Briefcase,
+    href: "/dashboard/jobs",
+    description: "Job postings & management"
   },
   {
     title: "Requisition",

@@ -125,6 +125,26 @@ export class JobService {
     }
   }
 
+  static async getAllJobs(): Promise<Job[]> {
+    try {
+      const q = query(
+        collection(db, this.JOBS_COLLECTION),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      } as Job));
+    } catch (error) {
+      console.error('Error getting all jobs:', error);
+      throw error;
+    }
+  }
+
   // Dynamic Fields Management
   static async createDynamicField(fieldData: CreateDynamicFieldRequest): Promise<string> {
     try {
