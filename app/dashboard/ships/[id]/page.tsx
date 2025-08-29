@@ -32,7 +32,6 @@ import {
   Eye,
   AlertTriangle,
   Lock,
-  Briefcase,
   Upload,
   X,
   File,
@@ -41,8 +40,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Ship as ShipType, CrewMember, Certificate, Drawing, InventoryItem, Requisition, Task } from "@/lib/types/ships"
-import type { Job, CreateJobRequest } from "@/lib/types/jobs"
-import { JobService } from "@/lib/services/job-service"
 import { storageService } from "@/lib/storage-service"
 
 export default function ShipDetailPage() {
@@ -104,7 +101,6 @@ export default function ShipDetailPage() {
   const [showAddInventoryDialog, setShowAddInventoryDialog] = useState(false)
   const [showAddRequisitionDialog, setShowAddRequisitionDialog] = useState(false)
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false)
-  const [showPostJobDialog, setShowPostJobDialog] = useState(false)
 
   // Form states
   const [newCrewMember, setNewCrewMember] = useState({
@@ -139,7 +135,24 @@ export default function ShipDetailPage() {
     priority: "medium" as "low" | "medium" | "high",
     requiredDate: "",
     estimatedCost: "",
-    attachments: [] as File[]
+    attachments: [] as File[],
+    items: [] as Array<{
+      id: string;
+      name: string;
+      description: string;
+      quantity: number;
+      unit: string;
+      estimatedPrice: number;
+    }>
+  })
+
+  // Requisition item form state
+  const [newRequisitionItem, setNewRequisitionItem] = useState({
+    name: "",
+    description: "",
+    quantity: 1,
+    unit: "pcs",
+    estimatedPrice: 0
   })
 
   // Requisition image upload states
@@ -218,40 +231,6 @@ export default function ShipDetailPage() {
     createdAt: ""
   })
 
-  const [newJob, setNewJob] = useState({
-    title: "",
-    subtitle: "",
-    position: "",
-    category: "",
-    jobType: "Permanent Job",
-    company: "",
-    companyId: "",
-    imageUrl: "",
-    rating: "",
-    jobDescription: "",
-    location: "",
-    salaryMin: 400,
-    salaryMax: 5000,
-    currency: "USD",
-    education: [] as string[],
-    function: [] as string[],
-    industry: [] as string[],
-    role: [] as string[],
-    skills: [] as string[]
-  })
-
-  const [customFields, setCustomFields] = useState<{[key: string]: string}>({})
-  const [selectedOptions, setSelectedOptions] = useState<{[key: string]: string[]}>({
-    education: [],
-    function: [],
-    industry: [],
-    role: [],
-    skills: [],
-    category: []
-  })
-  const [availableOptions, setAvailableOptions] = useState<{[key: string]: string[]}>(JobService.getDefaultOptions())
-  const [postedJobs, setPostedJobs] = useState<Job[]>([])
-
   // Find current ship
   useEffect(() => {
     if (!ships || ships.length === 0 || !shipId) {
@@ -273,14 +252,13 @@ export default function ShipDetailPage() {
   const loadShipData = async (id: string) => {
     setLoadingData(true)
     try {
-      const [crewData, certData, drawingData, invData, reqData, taskData, jobsData] = await Promise.all([
+      const [crewData, certData, drawingData, invData, reqData, taskData] = await Promise.all([
         getShipCrew(id),
         getShipCertificates(id),
         getShipDrawings(id),
         getShipInventory(id),
         getShipRequisitions(id),
-        getShipTasks(id),
-        JobService.getJobsByShip(id)
+        getShipTasks(id)
       ])
       
       setCrew(crewData)
@@ -289,7 +267,6 @@ export default function ShipDetailPage() {
       setInventory(invData)
       setRequisitions(reqData)
       setTasks(taskData)
-      setPostedJobs(jobsData)
     } catch (error: any) {
       toast.error("Failed to load ship data: " + error.message)
     } finally {
@@ -390,133 +367,9 @@ export default function ShipDetailPage() {
   }
 
   // Job posting handlers
-  const handlePostJob = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newJob.title || !newJob.position || !newJob.jobDescription || selectedOptions.category.length === 0) {
-      toast.error("Please fill in all required fields including category")
-      return
-    }
+  
+  
 
-    try {
-      const jobData: CreateJobRequest = {
-        title: newJob.title,
-        subtitle: newJob.subtitle,
-        position: newJob.position,
-        category: selectedOptions.category.length > 0 ? selectedOptions.category[0] : "General", // Take first selected category
-        jobType: newJob.jobType as any,
-        company: newJob.company,
-        companyId: userPermissions?.companyId || "",
-        imageUrl: newJob.imageUrl,
-        rating: newJob.rating,
-        jobDescription: newJob.jobDescription,
-        location: newJob.location,
-        salaryMin: newJob.salaryMin,
-        salaryMax: newJob.salaryMax,
-        currency: newJob.currency,
-        education: selectedOptions.education,
-        function: selectedOptions.function,
-        industry: selectedOptions.industry,
-        role: selectedOptions.role,
-        skills: selectedOptions.skills,
-        shipId: shipId,
-        createdBy: user?.uid || "",
-        status: 'active'
-      }
-
-      await JobService.createJob(jobData)
-      toast.success("Job posted successfully!")
-      setShowPostJobDialog(false)
-      resetJobForm()
-      // Reload ship data to refresh jobs list
-      loadShipData(shipId)
-    } catch (error: any) {
-      toast.error("Failed to post job: " + error.message)
-    }
-  }
-
-  const resetJobForm = () => {
-    setNewJob({
-      title: "",
-      subtitle: "",
-      position: "",
-      category: "",
-      jobType: "Permanent Job",
-      company: "",
-      companyId: "",
-      imageUrl: "",
-      rating: "",
-      jobDescription: "",
-      location: "",
-      salaryMin: 400,
-      salaryMax: 5000,
-      currency: "USD",
-      education: [],
-      function: [],
-      industry: [],
-      role: [],
-      skills: []
-    })
-    setSelectedOptions({
-      education: [],
-      function: [],
-      industry: [],
-      role: [],
-      skills: [],
-      category: []
-    })
-    setCustomFields({})
-  }
-
-  const handleOptionToggle = (fieldName: string, option: string) => {
-    setSelectedOptions(prev => {
-      const currentOptions = prev[fieldName] || [] // Safety check to prevent undefined
-      return {
-        ...prev,
-        [fieldName]: currentOptions.includes(option) 
-          ? currentOptions.filter(item => item !== option)
-          : [...currentOptions, option]
-      }
-    })
-  }
-
-  const handleAddCustomField = async (fieldName: string) => {
-    const newFieldValue = customFields[fieldName]
-    if (!newFieldValue || !newFieldValue.trim()) {
-      toast.error("Please enter a valid field value")
-      return
-    }
-
-    try {
-      // Add to dynamic fields collection
-      await JobService.createDynamicField({
-        fieldName,
-        fieldValue: newFieldValue.trim(),
-        createdBy: user?.uid || ""
-      })
-
-      // Add to available options temporarily (will be permanent after admin approval)
-      setAvailableOptions(prev => ({
-        ...prev,
-        [fieldName]: [...prev[fieldName], newFieldValue.trim()]
-      }))
-
-      // Select the newly added option
-      setSelectedOptions(prev => ({
-        ...prev,
-        [fieldName]: [...prev[fieldName], newFieldValue.trim()]
-      }))
-
-      // Clear the custom field input
-      setCustomFields(prev => ({
-        ...prev,
-        [fieldName]: ""
-      }))
-
-      toast.success("Custom field added! It will be available for all users after admin approval.")
-    } catch (error: any) {
-      toast.error("Failed to add custom field: " + error.message)
-    }
-  }
 
   // Certificate file upload handlers
   const handleCertificateFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1068,10 +921,59 @@ export default function ShipDetailPage() {
     }
   }
 
+  const handleAddRequisitionItem = () => {
+    if (!newRequisitionItem.name || newRequisitionItem.quantity <= 0) {
+      toast.error("Please fill in item name and quantity")
+      return
+    }
+
+    const item = {
+      id: `item-${Date.now()}-${Math.random()}`,
+      name: newRequisitionItem.name,
+      description: newRequisitionItem.description,
+      quantity: newRequisitionItem.quantity,
+      unit: newRequisitionItem.unit,
+      estimatedPrice: newRequisitionItem.estimatedPrice
+    }
+
+    setNewRequisition(prev => ({
+      ...prev,
+      items: [...prev.items, item]
+    }))
+
+    // Reset item form
+    setNewRequisitionItem({
+      name: "",
+      description: "",
+      quantity: 1,
+      unit: "pcs",
+      estimatedPrice: 0
+    })
+
+    toast.success("Item added to requisition")
+  }
+
+  const handleRemoveRequisitionItem = (index: number) => {
+    setNewRequisition(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }))
+    toast.success("Item removed from requisition")
+  }
+
+  const calculateTotalCost = () => {
+    return newRequisition.items.reduce((total, item) => total + (item.quantity * item.estimatedPrice), 0)
+  }
+
   const handleAddRequisition = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newRequisition.title || !newRequisition.requiredDate) {
       toast.error("Please fill in required fields")
+      return
+    }
+
+    if (newRequisition.items.length === 0) {
+      toast.error("Please add at least one item to the requisition")
       return
     }
 
@@ -1098,16 +1000,9 @@ export default function ShipDetailPage() {
         requiredDate: new Date(newRequisition.requiredDate),
         status: "pending" as const,
         priority: newRequisition.priority as 'low' | 'medium' | 'high' | 'urgent',
-        items: [{
-          id: `item-${Date.now()}`,
-          name: newRequisition.title,
-          description: newRequisition.description,
-          quantity: 1,
-          unit: "pcs",
-          estimatedPrice: parseFloat(newRequisition.estimatedCost) || 0
-        }],
+        items: newRequisition.items,
         notes: notesWithAttachments,
-        totalCost: parseFloat(newRequisition.estimatedCost) || 0
+        totalCost: calculateTotalCost()
         // Note: attachmentUrls are included in notes field for now since Requisition interface doesn't have attachments field
       }
 
@@ -1123,7 +1018,17 @@ export default function ShipDetailPage() {
         priority: "medium",
         requiredDate: "",
         estimatedCost: "",
-        attachments: []
+        attachments: [],
+        items: []
+      })
+      
+      // Reset item form
+      setNewRequisitionItem({
+        name: "",
+        description: "",
+        quantity: 1,
+        unit: "pcs",
+        estimatedPrice: 0
       })
       
       // Reset image-related state
@@ -1393,16 +1298,10 @@ export default function ShipDetailPage() {
           <TabsContent value="crew" className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Crew Members</h3>
-              <div className="flex gap-2">
-                <Button onClick={() => setShowPostJobDialog(true)} variant="outline">
-                  <Briefcase className="h-4 w-4 mr-2" />
-                  Post Job
-                </Button>
-                <Button onClick={() => setShowAddCrewDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Crew Member
-                </Button>
-              </div>
+              <Button onClick={() => setShowAddCrewDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Crew Member
+              </Button>
             </div>
 
             <div className="grid gap-4">
@@ -1446,61 +1345,6 @@ export default function ShipDetailPage() {
                 </Card>
               )}
             </div>
-
-            {/* Posted Jobs Section */}
-            {postedJobs.length > 0 && (
-              <div className="mt-8">
-                <h4 className="text-lg font-semibold mb-4">Posted Jobs ({postedJobs.length})</h4>
-                <div className="grid gap-4">
-                  {postedJobs.map((job) => (
-                    <Card key={job.id} className="border-l-4 border-l-blue-500">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h5 className="font-semibold text-lg">{job.title}</h5>
-                            <p className="text-sm text-gray-600 mb-2">{job.position} • {job.category}</p>
-                            <p className="text-sm text-gray-700 mb-3 line-clamp-2">{job.jobDescription}</p>
-                            
-                            <div className="grid grid-cols-2 gap-4 text-xs text-gray-500 mb-3">
-                              <div>📍 {job.location}</div>
-                              <div>💰 {job.salaryMin}-{job.salaryMax} {job.currency}</div>
-                              <div>👥 {job.role.join(', ')}</div>
-                              <div>🎓 {job.education.join(', ')}</div>
-                            </div>
-
-                            {job.skills.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-3">
-                                {job.skills.slice(0, 5).map(skill => (
-                                  <span key={skill} className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                                    {skill}
-                                  </span>
-                                ))}
-                                {job.skills.length > 5 && (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
-                                    +{job.skills.length - 5} more
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right ml-4">
-                            <Badge className="bg-green-100 text-green-800 mb-2">
-                              {job.status}
-                            </Badge>
-                            <p className="text-xs text-gray-500">
-                              Job ID: {job.jobId}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Posted: {new Date(job.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
           </TabsContent>
 
           {/* Certificates Tab */}
@@ -2316,7 +2160,15 @@ export default function ShipDetailPage() {
               priority: "medium",
               requiredDate: "",
               estimatedCost: "",
-              attachments: []
+              attachments: [],
+              items: []
+            })
+            setNewRequisitionItem({
+              name: "",
+              description: "",
+              quantity: 1,
+              unit: "pcs",
+              estimatedPrice: 0
             })
             setRequisitionImages([])
             setRequisitionPreviews({})
@@ -2324,77 +2176,193 @@ export default function ShipDetailPage() {
           }
           setShowAddRequisitionDialog(open)
         }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Requisition</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddRequisition} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="req-title">Title *</Label>
-                <Input
-                  id="req-title"
-                  required
-                  value={newRequisition.title}
-                  onChange={(e) => setNewRequisition(prev => ({...prev, title: e.target.value}))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="req-description">Description</Label>
-                <Textarea
-                  id="req-description"
-                  value={newRequisition.description}
-                  onChange={(e) => setNewRequisition(prev => ({...prev, description: e.target.value}))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleAddRequisition} className="space-y-6">
+              {/* Basic Requisition Information */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-900 border-b pb-2">Requisition Details</h4>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="req-type">Type</Label>
-                  <Select value={newRequisition.type} onValueChange={(value) => setNewRequisition(prev => ({...prev, type: value as "material" | "service"}))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="material">Material</SelectItem>
-                      <SelectItem value="service">Service</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="req-title">Requisition Title *</Label>
+                  <Input
+                    id="req-title"
+                    required
+                    value={newRequisition.title}
+                    onChange={(e) => setNewRequisition(prev => ({...prev, title: e.target.value}))}
+                    placeholder="e.g., Engine Spare Parts"
+                  />
                 </div>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="req-priority">Priority</Label>
-                  <Select value={newRequisition.priority} onValueChange={(value) => setNewRequisition(prev => ({...prev, priority: value as "low" | "medium" | "high"}))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="req-description">Description</Label>
+                  <Textarea
+                    id="req-description"
+                    value={newRequisition.description}
+                    onChange={(e) => setNewRequisition(prev => ({...prev, description: e.target.value}))}
+                    placeholder="Additional notes or specifications"
+                  />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="req-date">Required Date *</Label>
-                <Input
-                  id="req-date"
-                  type="date"
-                  required
-                  value={newRequisition.requiredDate}
-                  onChange={(e) => setNewRequisition(prev => ({...prev, requiredDate: e.target.value}))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="req-cost">Estimated Cost</Label>
-                <Input
-                  id="req-cost"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newRequisition.estimatedCost}
-                  onChange={(e) => setNewRequisition(prev => ({...prev, estimatedCost: e.target.value}))}
-                />
+                
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="req-type">Type</Label>
+                    <Select value={newRequisition.type} onValueChange={(value) => setNewRequisition(prev => ({...prev, type: value as "material" | "service"}))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="material">Material</SelectItem>
+                        <SelectItem value="service">Service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="req-priority">Priority</Label>
+                    <Select value={newRequisition.priority} onValueChange={(value) => setNewRequisition(prev => ({...prev, priority: value as "low" | "medium" | "high"}))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="req-date">Required Date *</Label>
+                    <Input
+                      id="req-date"
+                      type="date"
+                      required
+                      value={newRequisition.requiredDate}
+                      onChange={(e) => setNewRequisition(prev => ({...prev, requiredDate: e.target.value}))}
+                    />
+                  </div>
+                </div>
               </div>
 
+              {/* Items Section */}
+              <div className="space-y-4">
+              
+
+                {/* Add New Item Form */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h5 className="font-medium text-gray-900 mb-3">Add New Item</h5>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Item Name *</Label>
+                      <Input
+                        value={newRequisitionItem.name}
+                        onChange={(e) => setNewRequisitionItem(prev => ({...prev, name: e.target.value}))}
+                        placeholder="e.g., Engine Oil Filter"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Description</Label>
+                      <Input
+                        value={newRequisitionItem.description}
+                        onChange={(e) => setNewRequisitionItem(prev => ({...prev, description: e.target.value}))}
+                        placeholder="Optional description"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Quantity *</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newRequisitionItem.quantity}
+                        onChange={(e) => setNewRequisitionItem(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Unit</Label>
+                      <Select value={newRequisitionItem.unit} onValueChange={(value) => setNewRequisitionItem(prev => ({...prev, unit: value}))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pcs">Pieces</SelectItem>
+                          <SelectItem value="kg">Kilograms</SelectItem>
+                          <SelectItem value="ltr">Liters</SelectItem>
+                          <SelectItem value="mtr">Meters</SelectItem>
+                          <SelectItem value="set">Set</SelectItem>
+                          <SelectItem value="box">Box</SelectItem>
+                          <SelectItem value="roll">Roll</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Est. Price (per unit)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newRequisitionItem.estimatedPrice}
+                        onChange={(e) => setNewRequisitionItem(prev => ({...prev, estimatedPrice: parseFloat(e.target.value) || 0}))}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleAddRequisitionItem}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Item to Requisition
+                  </Button>
+                </div>
+
+                {/* Items List */}
+                {newRequisition.items.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Added Items:</Label>
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 grid grid-cols-6 gap-4 text-sm font-medium text-gray-700">
+                        <div>Item Name</div>
+                        <div>Description</div>
+                        <div>Quantity</div>
+                        <div>Unit</div>
+                        <div>Unit Price</div>
+                        <div>Total</div>
+                      </div>
+                      {newRequisition.items.map((item, index) => (
+                        <div key={item.id} className="px-4 py-3 grid grid-cols-6 gap-4 border-t text-sm items-center">
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-gray-600">{item.description || "-"}</div>
+                          <div>{item.quantity}</div>
+                          <div>{item.unit}</div>
+                          <div>${item.estimatedPrice.toFixed(2)}</div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">${(item.quantity * item.estimatedPrice).toFixed(2)}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveRequisitionItem(index)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="bg-gray-50 px-4 py-2 grid grid-cols-6 gap-4 text-sm font-semibold">
+                        <div className="col-span-5 text-right">Total Estimated Cost:</div>
+                        <div>${calculateTotalCost().toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+             
               {/* Image Upload Section */}
               <div className="space-y-3">
                 <Label>Attach Images (Optional)</Label>
@@ -2457,8 +2425,11 @@ export default function ShipDetailPage() {
                 <Button type="button" variant="outline" onClick={() => setShowAddRequisitionDialog(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isRequisitionUploading}>
-                  {isRequisitionUploading ? "Creating..." : "Create Requisition"}
+                <Button 
+                  type="submit" 
+                  disabled={isRequisitionUploading || newRequisition.items.length === 0}
+                >
+                  {isRequisitionUploading ? "Creating..." : `Create Requisition (${newRequisition.items.length} items)`}
                 </Button>
               </div>
             </form>
@@ -2544,450 +2515,9 @@ export default function ShipDetailPage() {
         </Dialog>
 
         {/* Post Job Dialog */}
-        <Dialog open={showPostJobDialog} onOpenChange={setShowPostJobDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Post Job for {currentShip?.name}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handlePostJob} className="space-y-6">
-              {/* Basic Job Information */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-title">Job Title *</Label>
-                  <Input
-                    id="job-title"
-                    required
-                    value={newJob.title}
-                    placeholder="e.g., Marine Engineer"
-                    onChange={(e) => setNewJob(prev => ({...prev, title: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="job-position">Position *</Label>
-                  <Input
-                    id="job-position"
-                    required
-                    value={newJob.position}
-                    placeholder="e.g., Second Officer"
-                    onChange={(e) => setNewJob(prev => ({...prev, position: e.target.value}))}
-                  />
-                </div>
-              </div>
+        
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-category">Category</Label>
-                  <Select value={newJob.category} onValueChange={(value) => setNewJob(prev => ({...prev, category: value}))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableOptions.category.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="job-type">Job Type</Label>
-                  <Select value={newJob.jobType} onValueChange={(value) => setNewJob(prev => ({...prev, jobType: value}))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select job type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableOptions.jobType.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Company Information */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-company">Company Name</Label>
-                  <Input
-                    id="job-company"
-                    value={newJob.company}
-                    placeholder="Company name"
-                    onChange={(e) => setNewJob(prev => ({...prev, company: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="job-location">Location</Label>
-                  <Input
-                    id="job-location"
-                    value={newJob.location}
-                    placeholder="e.g., Mumbai, Maharashtra"
-                    onChange={(e) => setNewJob(prev => ({...prev, location: e.target.value}))}
-                  />
-                </div>
-              </div>
-
-              {/* Salary Range */}
-              <div>
-                <Label className="text-base font-medium">Salary Range</Label>
-                <div className="grid grid-cols-3 gap-4 mt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="salary-min">Minimum</Label>
-                    <Input
-                      id="salary-min"
-                      type="number"
-                      value={newJob.salaryMin}
-                      onChange={(e) => setNewJob(prev => ({...prev, salaryMin: parseInt(e.target.value) || 0}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="salary-max">Maximum</Label>
-                    <Input
-                      id="salary-max"
-                      type="number"
-                      value={newJob.salaryMax}
-                      onChange={(e) => setNewJob(prev => ({...prev, salaryMax: parseInt(e.target.value) || 0}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="salary-currency">Currency</Label>
-                    <Select value={newJob.currency} onValueChange={(value) => setNewJob(prev => ({...prev, currency: value}))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="INR">INR</SelectItem>
-                        <SelectItem value="EUR">EUR</SelectItem>
-                        <SelectItem value="GBP">GBP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Multi-select fields with custom field addition */}
-              {(['education', 'function', 'industry', 'role', 'skills'] as const).map(fieldName => (
-                <div key={fieldName} className="space-y-2">
-                  <Label className="text-base font-medium capitalize">{fieldName}</Label>
-                  <div className="border rounded-lg p-4 bg-gray-50 max-h-40 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {availableOptions[fieldName].map(option => (
-                        <label key={option} className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={(selectedOptions[fieldName] || []).includes(option)}
-                            onChange={() => handleOptionToggle(fieldName, option)}
-                            className="rounded"
-                          />
-                          <span className="text-sm">{option}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="border-t pt-3">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder={`Add custom ${fieldName}`}
-                          value={customFields[fieldName] || ""}
-                          onChange={(e) => setCustomFields(prev => ({
-                            ...prev,
-                            [fieldName]: e.target.value
-                          }))}
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleAddCustomField(fieldName)}
-                          disabled={!customFields[fieldName]?.trim()}
-                        >
-                          Add
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  {(selectedOptions[fieldName] && selectedOptions[fieldName].length > 0) && (
-                    <div className="text-xs text-green-600">
-                      Selected: {selectedOptions[fieldName].join(', ')}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Job Description */}
-              <div className="space-y-2">
-                <Label htmlFor="job-description">Job Description *</Label>
-                <Textarea
-                  id="job-description"
-                  required
-                  rows={6}
-                  value={newJob.jobDescription}
-                  placeholder="Detailed job description, requirements, responsibilities..."
-                  onChange={(e) => setNewJob(prev => ({...prev, jobDescription: e.target.value}))}
-                />
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-2 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowPostJobDialog(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                  Post Job
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* Post Job Dialog */}
-        <Dialog open={showPostJobDialog} onOpenChange={setShowPostJobDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Post Job for {currentShip?.name}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handlePostJob} className="space-y-6">
-              {/* Basic Job Information */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-title">Job Title *</Label>
-                  <Input
-                    id="job-title"
-                    required
-                    value={newJob.title}
-                    onChange={(e) => setNewJob(prev => ({...prev, title: e.target.value}))}
-                    placeholder="e.g. Marine Engineer"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="job-position">Position *</Label>
-                  <Input
-                    id="job-position"
-                    required
-                    value={newJob.position}
-                    onChange={(e) => setNewJob(prev => ({...prev, position: e.target.value}))}
-                    placeholder="e.g. Second Officer"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-subtitle">Subtitle</Label>
-                  <Input
-                    id="job-subtitle"
-                    value={newJob.subtitle}
-                    onChange={(e) => setNewJob(prev => ({...prev, subtitle: e.target.value}))}
-                    placeholder="e.g. Proprietor Of Maritime Smart Services"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="job-type">Job Type *</Label>
-                  <Select value={newJob.jobType} onValueChange={(value) => setNewJob(prev => ({...prev, jobType: value}))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select job type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableOptions.jobType.map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Category - Dynamic Field */}
-              <div className="space-y-2">
-                <Label>Category *</Label>
-                <div className="p-4 border rounded-lg">
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {availableOptions.category.map(cat => (
-                      <div key={cat} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`category-${cat}`}
-                          checked={(selectedOptions.category || []).includes(cat)}
-                          onChange={() => handleOptionToggle('category', cat)}
-                        />
-                        <label htmlFor={`category-${cat}`} className="text-sm">{cat}</label>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Add custom category"
-                      value={customFields.category || ''}
-                      onChange={(e) => setCustomFields(prev => ({...prev, category: e.target.value}))}
-                      className="flex-1"
-                    />
-                    <Button 
-                      type="button" 
-                      variant="outline"
-                      onClick={() => handleAddCustomField('category')}
-                      disabled={!customFields.category?.trim()}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                  {(selectedOptions.category && selectedOptions.category.length > 0) && (
-                    <div className="mt-2 text-sm text-green-600">
-                      Selected: {selectedOptions.category.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Company Information */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company-name">Company Name *</Label>
-                  <Input
-                    id="company-name"
-                    required
-                    value={newJob.company}
-                    onChange={(e) => setNewJob(prev => ({...prev, company: e.target.value}))}
-                    placeholder="Company name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company-rating">Company Rating</Label>
-                  <Input
-                    id="company-rating"
-                    value={newJob.rating}
-                    onChange={(e) => setNewJob(prev => ({...prev, rating: e.target.value}))}
-                    placeholder="e.g. 4.6"
-                  />
-                </div>
-              </div>
-
-              {/* Location & Salary */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job-location">Location *</Label>
-                  <Input
-                    id="job-location"
-                    required
-                    value={newJob.location}
-                    onChange={(e) => setNewJob(prev => ({...prev, location: e.target.value}))}
-                    placeholder="e.g. Mumbai, Maharashtra"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
-                  <Select value={newJob.currency} onValueChange={(value) => setNewJob(prev => ({...prev, currency: value}))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="INR">INR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="salary-min">Minimum Salary *</Label>
-                  <Input
-                    id="salary-min"
-                    type="number"
-                    required
-                    value={newJob.salaryMin}
-                    onChange={(e) => setNewJob(prev => ({...prev, salaryMin: parseInt(e.target.value) || 0}))}
-                    placeholder="400"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="salary-max">Maximum Salary *</Label>
-                  <Input
-                    id="salary-max"
-                    type="number"
-                    required
-                    value={newJob.salaryMax}
-                    onChange={(e) => setNewJob(prev => ({...prev, salaryMax: parseInt(e.target.value) || 0}))}
-                    placeholder="5000"
-                  />
-                </div>
-              </div>
-
-              {/* Dynamic Multi-select Fields */}
-              {['education', 'function', 'industry', 'role', 'skills'].map(fieldName => (
-                <div key={fieldName} className="space-y-2">
-                  <Label className="capitalize">{fieldName} Requirements</Label>
-                  <div className="p-4 border rounded-lg max-h-48 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {availableOptions[fieldName]?.map((option: string) => (
-                        <div key={option} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`${fieldName}-${option}`}
-                            checked={(selectedOptions[fieldName] || []).includes(option)}
-                            onChange={() => handleOptionToggle(fieldName, option)}
-                            className="rounded"
-                          />
-                          <label htmlFor={`${fieldName}-${option}`} className="text-sm">{option}</label>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 pt-2 border-t">
-                      <Input
-                        placeholder={`Add custom ${fieldName}`}
-                        value={customFields[fieldName] || ''}
-                        onChange={(e) => setCustomFields(prev => ({...prev, [fieldName]: e.target.value}))}
-                        className="flex-1"
-                      />
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleAddCustomField(fieldName)}
-                        disabled={!customFields[fieldName]?.trim()}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                    {selectedOptions[fieldName].length > 0 && (
-                      <div className="mt-2 text-sm text-green-600">
-                        Selected: {selectedOptions[fieldName].join(', ')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Job Description */}
-              <div className="space-y-2">
-                <Label htmlFor="job-description">Job Description *</Label>
-                <Textarea
-                  id="job-description"
-                  required
-                  rows={6}
-                  value={newJob.jobDescription}
-                  onChange={(e) => setNewJob(prev => ({...prev, jobDescription: e.target.value}))}
-                  placeholder="Detailed job description..."
-                />
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-2 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowPostJobDialog(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                  Post Job
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+           
 
         {/* View Drawing Dialog */}
         <Dialog open={showViewDrawingDialog} onOpenChange={setShowViewDrawingDialog}>
