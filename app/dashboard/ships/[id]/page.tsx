@@ -134,7 +134,6 @@ export default function ShipDetailPage() {
     type: "material" as "material" | "service",
     priority: "medium" as "low" | "medium" | "high",
     requiredDate: "",
-    estimatedCost: "",
     attachments: [] as File[],
     items: [] as Array<{
       id: string;
@@ -142,7 +141,6 @@ export default function ShipDetailPage() {
       description: string;
       quantity: number;
       unit: string;
-      estimatedPrice: number;
     }>
   })
 
@@ -151,8 +149,7 @@ export default function ShipDetailPage() {
     name: "",
     description: "",
     quantity: 1,
-    unit: "pcs",
-    estimatedPrice: 0
+    unit: "pcs"
   })
 
   // Requisition image upload states
@@ -932,8 +929,7 @@ export default function ShipDetailPage() {
       name: newRequisitionItem.name,
       description: newRequisitionItem.description,
       quantity: newRequisitionItem.quantity,
-      unit: newRequisitionItem.unit,
-      estimatedPrice: newRequisitionItem.estimatedPrice
+      unit: newRequisitionItem.unit
     }
 
     setNewRequisition(prev => ({
@@ -946,8 +942,7 @@ export default function ShipDetailPage() {
       name: "",
       description: "",
       quantity: 1,
-      unit: "pcs",
-      estimatedPrice: 0
+      unit: "pcs"
     })
 
     toast.success("Item added to requisition")
@@ -959,10 +954,6 @@ export default function ShipDetailPage() {
       items: prev.items.filter((_, i) => i !== index)
     }))
     toast.success("Item removed from requisition")
-  }
-
-  const calculateTotalCost = () => {
-    return newRequisition.items.reduce((total, item) => total + (item.quantity * item.estimatedPrice), 0)
   }
 
   const handleAddRequisition = async (e: React.FormEvent) => {
@@ -1001,8 +992,7 @@ export default function ShipDetailPage() {
         status: "pending" as const,
         priority: newRequisition.priority as 'low' | 'medium' | 'high' | 'urgent',
         items: newRequisition.items,
-        notes: notesWithAttachments,
-        totalCost: calculateTotalCost()
+        notes: notesWithAttachments
         // Note: attachmentUrls are included in notes field for now since Requisition interface doesn't have attachments field
       }
 
@@ -1017,7 +1007,6 @@ export default function ShipDetailPage() {
         type: "material",
         priority: "medium",
         requiredDate: "",
-        estimatedCost: "",
         attachments: [],
         items: []
       })
@@ -1027,8 +1016,7 @@ export default function ShipDetailPage() {
         name: "",
         description: "",
         quantity: 1,
-        unit: "pcs",
-        estimatedPrice: 0
+        unit: "pcs"
       })
       
       // Reset image-related state
@@ -1688,9 +1676,6 @@ export default function ShipDetailPage() {
                                         'bg-gray-100 text-gray-800'}>
                           {req.status}
                         </Badge>
-                        {req.totalCost && req.totalCost > 0 && (
-                          <p className="text-sm font-semibold mt-1">${req.totalCost.toLocaleString()}</p>
-                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -2159,7 +2144,6 @@ export default function ShipDetailPage() {
               type: "material",
               priority: "medium",
               requiredDate: "",
-              estimatedCost: "",
               attachments: [],
               items: []
             })
@@ -2167,8 +2151,7 @@ export default function ShipDetailPage() {
               name: "",
               description: "",
               quantity: 1,
-              unit: "pcs",
-              estimatedPrice: 0
+              unit: "pcs"
             })
             setRequisitionImages([])
             setRequisitionPreviews({})
@@ -2297,17 +2280,6 @@ export default function ShipDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm">Est. Price (per unit)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={newRequisitionItem.estimatedPrice}
-                        onChange={(e) => setNewRequisitionItem(prev => ({...prev, estimatedPrice: parseFloat(e.target.value) || 0}))}
-                        placeholder="0.00"
-                      />
-                    </div>
                   </div>
                   <Button
                     type="button"
@@ -2325,23 +2297,20 @@ export default function ShipDetailPage() {
                   <div className="space-y-2">
                     <Label>Added Items:</Label>
                     <div className="border rounded-lg overflow-hidden">
-                      <div className="bg-gray-100 px-4 py-2 grid grid-cols-6 gap-4 text-sm font-medium text-gray-700">
+                      <div className="bg-gray-100 px-4 py-2 grid grid-cols-5 gap-4 text-sm font-medium text-gray-700">
                         <div>Item Name</div>
                         <div>Description</div>
                         <div>Quantity</div>
                         <div>Unit</div>
-                        <div>Unit Price</div>
-                        <div>Total</div>
+                        <div>Action</div>
                       </div>
                       {newRequisition.items.map((item, index) => (
-                        <div key={item.id} className="px-4 py-3 grid grid-cols-6 gap-4 border-t text-sm items-center">
+                        <div key={item.id} className="px-4 py-3 grid grid-cols-5 gap-4 border-t text-sm items-center">
                           <div className="font-medium">{item.name}</div>
                           <div className="text-gray-600">{item.description || "-"}</div>
                           <div>{item.quantity}</div>
                           <div>{item.unit}</div>
-                          <div>${item.estimatedPrice.toFixed(2)}</div>
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">${(item.quantity * item.estimatedPrice).toFixed(2)}</span>
+                          <div className="flex items-center justify-center">
                             <Button
                               type="button"
                               variant="ghost"
@@ -2354,10 +2323,6 @@ export default function ShipDetailPage() {
                           </div>
                         </div>
                       ))}
-                      <div className="bg-gray-50 px-4 py-2 grid grid-cols-6 gap-4 text-sm font-semibold">
-                        <div className="col-span-5 text-right">Total Estimated Cost:</div>
-                        <div>${calculateTotalCost().toFixed(2)}</div>
-                      </div>
                     </div>
                   </div>
                 )}
