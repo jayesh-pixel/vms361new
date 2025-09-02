@@ -48,8 +48,8 @@ import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { format } from "date-fns"
 import { toast } from "sonner"
+import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
 // Form schemas
@@ -626,14 +626,14 @@ export default function RequisitionPage() {
   const allRequisitions = [
     ...(sourceFilter === "all" || sourceFilter === "requisition" ? filteredRequisitions.map(req => ({ ...req, source: 'requisition' })) : []),
     ...(sourceFilter === "all" || sourceFilter === "ship" ? shipRequisitions.filter(req => {
-      const matchesSearch = (req.title || req.type || "").toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = (req.title || req.type || req.notes || "").toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = statusFilter === "all" || req.status === statusFilter
       const matchesType = typeFilter === "all" || req.type === typeFilter
       return matchesSearch && matchesStatus && matchesType
     }).map(req => ({ ...req, source: 'ship' })) : [])
   ].sort((a, b) => {
-    const dateA = new Date(a.requestDate || a.requiredDate || a.createdAt)
-    const dateB = new Date(b.requestDate || b.requiredDate || b.createdAt)
+    const dateA = new Date(a.requestDate || a.requiredDate || a.createdAt || new Date())
+    const dateB = new Date(b.requestDate || b.requiredDate || b.createdAt || new Date())
     return dateB.getTime() - dateA.getTime()
   })
 
@@ -1964,8 +1964,8 @@ export default function RequisitionPage() {
                             </TableCell>
                             <TableCell>{item.quantity}</TableCell>
                             <TableCell>{item.unit}</TableCell>
-                            <TableCell>${item.unitPrice.toLocaleString()}</TableCell>
-                            <TableCell>${item.totalPrice.toLocaleString()}</TableCell>
+                            <TableCell>${(item.unitPrice || 0).toLocaleString()}</TableCell>
+                            <TableCell>${(item.totalPrice || 0).toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
