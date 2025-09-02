@@ -120,6 +120,7 @@ export default function RequisitionPage() {
   const { canCreateRequisition, canApproveRequisition, canManageVendors, userPermissions } = usePermissions()
   const { 
     requisitions, 
+    shipRequisitions,
     vendors, 
     purchaseOrders, 
     workOrders, 
@@ -132,12 +133,14 @@ export default function RequisitionPage() {
     updateRequisition,
     createVendor,
     loadRequisitions,
+    loadAllShipRequisitions,
     loadVendors
   } = useRequisitions()
 
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
+  const [sourceFilter, setSourceFilter] = useState("all")
   const [showCreateRequisitionDialog, setShowCreateRequisitionDialog] = useState(false)
   const [showCreateVendorDialog, setShowCreateVendorDialog] = useState(false)
   const [selectedRequisition, setSelectedRequisition] = useState<any>(null)
@@ -481,29 +484,85 @@ export default function RequisitionPage() {
     try {
       console.log("Starting approval process for requisition:", requisitionId)
       
-      // Find the current requisition
-      const currentReq = requisitions.find(req => req.id === requisitionId)
+      // Find the requisition in both regular and ship requisitions
+      const regularReq = requisitions.find(req => req.id === requisitionId)
+      const shipReq = shipRequisitions.find(req => req.id === requisitionId)
+      const currentReq = regularReq || shipReq
+      
+      if (!currentReq) {
+        throw new Error("Requisition not found")
+      }
+      
       console.log("Current requisition status:", currentReq?.status)
+      console.log("Requisition source:", currentReq.source || (regularReq ? 'requisition' : 'ship'))
       
       // Show loading state
       toast.loading("Approving requisition...")
       
-      // Update the status
-      await updateRequisition(requisitionId, { status: "approved" })
-      console.log("Update requisition call completed")
+      // Update the status based on requisition type
+      if (shipReq && shipReq.shipId) {
+        // This is a ship requisition, use ship service
+        console.log(`Approving ship requisition ${requisitionId} for ship ${shipReq.shipId}`)
+        
+        const { ShipService } = await import('@/lib/services/ship-service')
+        
+        // First verify the ship requisition exists
+        console.log(`Looking for ship requisition ${requisitionId} in ship ${shipReq.shipId}`)
+        
+        const allShipReqs = await ShipService.getShipRequisitions(shipReq.shipId)
+        
+        console.log(`Found ${allShipReqs.length} total requisitions in ship ${shipReq.shipId}`)
+        console.log("Ship requisitions:", allShipReqs.map(r => ({ 
+          id: r.id, 
+          type: r.type, 
+          status: r.status,
+          notes: r.notes || 'No notes',
+          requestDate: r.requestDate 
+        })))
+        
+        let existingReq = allShipReqs.find(req => req.id === requisitionId)
+        let actualReqId = requisitionId
+        
+        if (!existingReq) {
+          console.log("Exact ID match not found, searching by content...")
+          // Try to find by other criteria if ID doesn't match (for legacy documents)
+          existingReq = allShipReqs.find(req => 
+            req.type === shipReq.type && 
+            req.requestedBy === shipReq.requestedBy &&
+            Math.abs(new Date(req.requestDate || req.createdAt).getTime() - new Date(shipReq.requestDate || shipReq.createdAt).getTime()) < 60000 // 1 minute tolerance
+          )
+          
+          if (existingReq) {
+            console.log(`Found requisition by content match. Using document ID: ${existingReq.id} instead of ${requisitionId}`)
+            actualReqId = existingReq.id
+          } else {
+            throw new Error(`Ship requisition not found. Looking for ID: ${requisitionId} in ship: ${shipReq.shipId}. Available IDs: ${allShipReqs.map(r => r.id).join(', ')}`)
+          }
+        } else {
+          console.log("Found ship requisition by exact ID match")
+        }
+        
+        console.log(`Proceeding with approval using ID: ${actualReqId}`)
+        await ShipService.updateRequisitionStatus(shipReq.shipId, actualReqId, "approved", user?.uid)
+        console.log("Ship requisition approved successfully")
+        
+        // Reload ship requisitions
+        await loadAllShipRequisitions()
+      } else {
+        // This is a regular requisition, use regular service
+        console.log("Approving regular requisition")
+        await updateRequisition(requisitionId, { status: "approved" })
+        console.log("Regular requisition approved successfully")
+        
+        // Reload regular requisitions
+        await loadRequisitions()
+      }
       
       // Dismiss loading and show success
       toast.dismiss()
       toast.success("Requisition approved successfully")
       
-      // Force reload requisitions to ensure UI is updated
-      console.log("Forcing reload of requisitions...")
-      await loadRequisitions()
-      console.log("Requisitions reloaded, new count:", requisitions.length)
-      
-      // Verify the status change
-      const updatedReq = requisitions.find(req => req.id === requisitionId)
-      console.log("Updated requisition status:", updatedReq?.status)
+      console.log("Requisitions reloaded")
       
     } catch (error: any) {
       console.error("Failed to approve requisition:", error)
@@ -561,6 +620,21 @@ export default function RequisitionPage() {
     const matchesStatus = statusFilter === "all" || req.status === statusFilter
     const matchesType = typeFilter === "all" || req.type === typeFilter
     return matchesSearch && matchesStatus && matchesType
+  })
+
+  // Combine regular requisitions with ship requisitions for display
+  const allRequisitions = [
+    ...(sourceFilter === "all" || sourceFilter === "requisition" ? filteredRequisitions.map(req => ({ ...req, source: 'requisition' })) : []),
+    ...(sourceFilter === "all" || sourceFilter === "ship" ? shipRequisitions.filter(req => {
+      const matchesSearch = (req.title || req.type || "").toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesStatus = statusFilter === "all" || req.status === statusFilter
+      const matchesType = typeFilter === "all" || req.type === typeFilter
+      return matchesSearch && matchesStatus && matchesType
+    }).map(req => ({ ...req, source: 'ship' })) : [])
+  ].sort((a, b) => {
+    const dateA = new Date(a.requestDate || a.requiredDate || a.createdAt)
+    const dateB = new Date(b.requestDate || b.requiredDate || b.createdAt)
+    return dateB.getTime() - dateA.getTime()
   })
 
   const getStatusBadge = (status: string) => {
@@ -1342,7 +1416,7 @@ export default function RequisitionPage() {
                   <Clock className="h-5 w-5 text-yellow-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.requisition?.pendingApproval || 0}</p>
+                  <p className="text-2xl font-bold text-slate-900">{(stats.requisition?.pendingApproval || 0) + shipRequisitions.filter(req => req.status === 'pending').length}</p>
                   <p className="text-sm text-slate-600">Pending</p>
                 </div>
               </div>
@@ -1356,7 +1430,7 @@ export default function RequisitionPage() {
                   <CheckCircle className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.requisition?.approved || 0}</p>
+                  <p className="text-2xl font-bold text-slate-900">{(stats.requisition?.approved || 0) + shipRequisitions.filter(req => req.status === 'approved').length}</p>
                   <p className="text-sm text-slate-600">Approved</p>
                 </div>
               </div>
@@ -1412,7 +1486,7 @@ export default function RequisitionPage() {
                   <AlertCircle className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.requisition?.urgent || 0}</p>
+                  <p className="text-2xl font-bold text-slate-900">{(stats.requisition?.urgent || 0) + shipRequisitions.filter(req => req.priority === 'urgent').length}</p>
                   <p className="text-sm text-slate-600">Urgent</p>
                 </div>
               </div>
@@ -1468,6 +1542,16 @@ export default function RequisitionPage() {
                         <SelectItem value="service">Service</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sources</SelectItem>
+                        <SelectItem value="requisition">Requisitions</SelectItem>
+                        <SelectItem value="ship">Ship Requisitions</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </CardHeader>
@@ -1488,11 +1572,20 @@ export default function RequisitionPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequisitions.map((req) => (
-                      <TableRow key={req.id}>
-                        <TableCell className="font-medium">{req.reqsnNumber || req.prNumber}</TableCell>
-                        <TableCell>{req.title}</TableCell>
-                        <TableCell>{req.department}</TableCell>
+                    {allRequisitions.map((req) => (
+                      <TableRow key={`${req.source}-${req.id}`}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {req.reqsnNumber || req.prNumber || req.id}
+                            {req.source === 'ship' && (
+                              <Badge variant="outline" className="text-xs">
+                                Ship: {req.shipName}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{req.title || req.type}</TableCell>
+                        <TableCell>{req.department || (req.source === 'ship' ? 'Ship Operations' : 'N/A')}</TableCell>
                         <TableCell>{req.catalogue || 'N/A'}</TableCell>
                         <TableCell>{req.model || 'N/A'}</TableCell>
                         <TableCell className="capitalize">{req.requisitionType || req.type}</TableCell>
@@ -1509,14 +1602,16 @@ export default function RequisitionPage() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleEditRequisition(req)}
-                              title="Edit Requisition"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            {req.source === 'requisition' && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleEditRequisition(req)}
+                                title="Edit Requisition"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
                             {canApproveRequisition() && req.status === "pending" && (
                               <Button 
                                 variant="ghost" 

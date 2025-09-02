@@ -21,6 +21,7 @@ import {
 interface RequisitionContextType {
   // State
   requisitions: ExtendedRequisition[]
+  shipRequisitions: any[]
   purchaseOrders: PurchaseOrder[]
   workOrders: WorkOrder[]
   vendors: Vendor[]
@@ -42,6 +43,7 @@ interface RequisitionContextType {
   deleteRequisition: (id: string) => Promise<void>
   getRequisitionById: (id: string) => Promise<ExtendedRequisition | null>
   loadRequisitions: (filters?: any) => Promise<void>
+  loadAllShipRequisitions: () => Promise<void>
 
   // Purchase Order Management
   createPurchaseOrder: (poData: Omit<PurchaseOrder, 'id' | 'createdAt' | 'updatedAt' | 'poNumber'>) => Promise<string>
@@ -96,6 +98,7 @@ export function RequisitionProvider({ children }: RequisitionProviderProps) {
 
   // State
   const [requisitions, setRequisitions] = useState<ExtendedRequisition[]>([])
+  const [shipRequisitions, setShipRequisitions] = useState<any[]>([])
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
@@ -206,6 +209,56 @@ export function RequisitionProvider({ children }: RequisitionProviderProps) {
       setRequisitions(requisitionsList)
     } catch (err: any) {
       console.error('Error loading requisitions:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadAllShipRequisitions = async (): Promise<void> => {
+    try {
+      setError(null)
+      console.log('loadAllShipRequisitions called')
+      
+      if (!userPermissions?.companyId) {
+        console.log('No company ID available, skipping ship requisitions load')
+        return
+      }
+
+      console.log('Loading ship requisitions for company:', userPermissions.companyId)
+      setLoading(true)
+      
+      // Import ShipService
+      const { ShipService } = await import('@/lib/services/ship-service')
+      
+      // Get all ships for the company
+      const ships = await ShipService.getShipsByCompany(userPermissions.companyId)
+      console.log('Found ships:', ships.length)
+      
+      // Get requisitions for all ships
+      const allShipRequisitions: any[] = []
+      for (const ship of ships) {
+        try {
+          const shipReqs = await ShipService.getShipRequisitions(ship.id)
+          // Add ship info to each requisition
+          const enrichedReqs = shipReqs.map(req => ({
+            ...req,
+            shipId: ship.id,
+            shipName: ship.name,
+            shipIMO: ship.imo,
+            source: 'ship'
+          }))
+          allShipRequisitions.push(...enrichedReqs)
+          console.log(`Loaded ${shipReqs.length} requisitions for ship ${ship.name}`)
+        } catch (shipError) {
+          console.error(`Error loading requisitions for ship ${ship.id}:`, shipError)
+        }
+      }
+      
+      console.log('Total ship requisitions loaded:', allShipRequisitions.length)
+      setShipRequisitions(allShipRequisitions)
+    } catch (err: any) {
+      console.error('Error loading ship requisitions:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -585,6 +638,7 @@ export function RequisitionProvider({ children }: RequisitionProviderProps) {
   useEffect(() => {
     if (userPermissions?.companyId) {
       loadRequisitions()
+      loadAllShipRequisitions()
       loadVendors()
       loadStats()
     }
@@ -593,6 +647,7 @@ export function RequisitionProvider({ children }: RequisitionProviderProps) {
   const contextValue: RequisitionContextType = {
     // State
     requisitions,
+    shipRequisitions,
     purchaseOrders,
     workOrders,
     vendors,
@@ -609,6 +664,7 @@ export function RequisitionProvider({ children }: RequisitionProviderProps) {
     deleteRequisition,
     getRequisitionById,
     loadRequisitions,
+    loadAllShipRequisitions,
 
     // Purchase Order Management
     createPurchaseOrder,

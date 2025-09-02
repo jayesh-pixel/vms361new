@@ -463,7 +463,6 @@ export class ShipService {
   static async createRequisition(shipId: string, reqData: Omit<Requisition, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
       const shipRef = doc(db, this.COLLECTION, shipId);
-      const reqRef = doc(collection(shipRef, this.REQUISITIONS_SUBCOLLECTION));
       
       // Build the new requisition object, only including defined values
       const newReq: any = {
@@ -477,7 +476,6 @@ export class ShipService {
         items: reqData.items,
         
         // System fields
-        id: reqRef.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -511,8 +509,13 @@ export class ShipService {
         newReq.notes = reqData.notes;
       }
 
-      await addDoc(collection(shipRef, this.REQUISITIONS_SUBCOLLECTION), newReq);
-      return reqRef.id;
+      // Use addDoc to create the document and get the actual ID
+      const docRef = await addDoc(collection(shipRef, this.REQUISITIONS_SUBCOLLECTION), newReq);
+      
+      // Update the document with its actual ID
+      await updateDoc(docRef, { id: docRef.id });
+      
+      return docRef.id;
     } catch (error) {
       console.error('Error creating requisition:', error);
       throw error;
@@ -550,8 +553,8 @@ export class ShipService {
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
-          id: doc.id, // Add the document ID
           ...data,
+          id: doc.id, // Ensure document ID takes precedence over any stored ID
           requestDate: data.requestDate?.toDate(),
           requiredDate: data.requiredDate?.toDate(),
           approvalDate: data.approvalDate?.toDate(),
